@@ -18,7 +18,6 @@ function PaymentContent() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const [txError, setTxError] = useState('');
 
-  // Load payment data from URL params
   useEffect(() => {
     const refParam = searchParams.get('ref');
     const planParam = searchParams.get('plan');
@@ -28,7 +27,6 @@ function PaymentContent() {
       setPlan(planParam);
       setStep('pay');
       startCountdown();
-      // Auto-verify if txHash was submitted
       const txParam = searchParams.get('txHash');
       if (txParam) {
         setTxHash(txParam);
@@ -80,11 +78,11 @@ function PaymentContent() {
   const handleVerify = useCallback(async (hash?: string) => {
     const targetHash = hash || txHash.trim();
     if (!targetHash) {
-      setTxError('Введите tx hash');
+      setTxError('Enter tx hash');
       return;
     }
     if (!targetHash.startsWith('0x') || targetHash.length < 66) {
-      setTxError('Неверный формат tx hash');
+      setTxError('Invalid tx hash format');
       return;
     }
 
@@ -102,7 +100,7 @@ function PaymentContent() {
         setStep('error');
         setError('Payment expired');
       } else {
-        setTxError(data.error || 'Транзакция не найдена или не подтверждена');
+        setTxError(data.error || 'Transaction not found or not confirmed yet');
         setStep('pay');
       }
     } catch (err: any) {
@@ -131,10 +129,10 @@ function PaymentContent() {
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
         <div className="text-center max-w-sm">
           <div className="text-6xl mb-4">❌</div>
-          <h1 className="text-xl font-bold mb-2">Ошибка</h1>
-          <p className="text-gray-400 mb-6">{error || 'Что-то пошло не так'}</p>
+          <h1 className="text-xl font-bold mb-2">Error</h1>
+          <p className="text-gray-400 mb-6">{error || 'Something went wrong'}</p>
           <button onClick={() => router.push('/v1')} className="px-6 py-3 bg-blue-600 rounded-lg font-medium">
-            На главную
+            Go to Home
           </button>
         </div>
       </div>
@@ -146,13 +144,13 @@ function PaymentContent() {
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
         <div className="text-center max-w-sm">
           <div className="text-6xl mb-4">✅</div>
-          <h1 className="text-2xl font-bold mb-2">Оплата подтверждена!</h1>
+          <h1 className="text-2xl font-bold mb-2">Payment confirmed!</h1>
           <p className="text-gray-400 mb-2">
-            План <strong>{planData?.name}</strong> активирован.
+            Plan <strong>{planData?.name}</strong> activated.
           </p>
-          <p className="text-gray-500 text-sm mb-6">Действует 30 дней</p>
+          <p className="text-gray-500 text-sm mb-6">Valid for 30 days</p>
           <button onClick={() => router.push('/v1')} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium">
-            Открыть Resolution Calendar
+            Open Resolution Calendar
           </button>
         </div>
       </div>
@@ -165,12 +163,12 @@ function PaymentContent() {
         <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
           <div className="max-w-lg mx-auto px-4 py-4 flex items-center gap-3">
             <button onClick={() => router.push('/v1')} className="text-gray-500 hover:text-white text-xl">←</button>
-            <h1 className="text-xl font-bold">Выбери план</h1>
+            <h1 className="text-xl font-bold">Choose a plan</h1>
           </div>
         </header>
 
         <main className="max-w-lg mx-auto px-4 py-8 space-y-4">
-          <p className="text-gray-400 text-sm mb-6">Оплата в USDT. Выбери сеть для оплаты:</p>
+          <p className="text-gray-400 text-sm mb-6">Pay with USDT. Select a network:</p>
 
           {(['pro', 'trader'] as const).map((key) => {
             const p = PLANS[key];
@@ -179,7 +177,7 @@ function PaymentContent() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-lg font-bold">{p.name}</h3>
                   <span className={`text-sm font-medium px-2 py-0.5 rounded ${key === 'trader' ? 'bg-purple-600' : 'bg-blue-600'}`}>
-                    ${p.priceUsdt}/мес
+                    ${p.priceUsdt}/mo
                   </span>
                 </div>
                 <ul className="space-y-1 mb-4">
@@ -190,7 +188,7 @@ function PaymentContent() {
                   ))}
                 </ul>
 
-                <p className="text-gray-500 text-xs mb-3">Выбери сеть:</p>
+                <p className="text-gray-500 text-xs mb-3">Select network:</p>
                 <div className="grid grid-cols-2 gap-2">
                   {(['ethereum', 'base', 'polygon', 'arbitrum'] as const).map((net) => (
                     <button
@@ -215,9 +213,9 @@ function PaymentContent() {
       <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
         <div className="text-center max-w-sm">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <h1 className="text-xl font-bold mb-2">Проверяем транзакцию...</h1>
+          <h1 className="text-xl font-bold mb-2">Verifying transaction...</h1>
           <p className="text-gray-400 text-sm mb-4">
-            Загружаем данные из блокчейна ({CHAIN_NAMES[chain]})
+            Fetching data from blockchain ({CHAIN_NAMES[chain]})
           </p>
           <code className="text-green-400 text-xs break-all">{txHash}</code>
         </div>
@@ -234,32 +232,29 @@ function PaymentContent() {
       <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center justify-between">
           <button onClick={() => setStep('select')} className="text-gray-500 hover:text-white text-xl">←</button>
-          <h1 className="text-xl font-bold">Оплата {planData?.name}</h1>
+          <h1 className="text-xl font-bold">Pay {planData?.name}</h1>
           <div className="text-xs text-gray-600 w-8" />
         </div>
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-8">
-        {/* Timer */}
         <div className="text-center mb-6">
-          <p className="text-gray-500 text-xs mb-1">Время на оплату:</p>
+          <p className="text-gray-500 text-xs mb-1">Time to pay:</p>
           <p className={`text-2xl font-mono font-bold ${countdown !== null && countdown < 300 ? 'text-red-400' : 'text-white'}`}>
             {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
           </p>
         </div>
 
-        {/* Amount */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-4 text-center">
-          <p className="text-gray-400 text-sm mb-1">Сумма к оплате</p>
+          <p className="text-gray-400 text-sm mb-1">Amount to pay</p>
           <p className="text-3xl font-bold text-white">
             {planData?.priceUsdt} <span className="text-lg text-gray-400">USDT</span>
           </p>
-          <p className="text-gray-500 text-xs mt-1">{CHAIN_CURRENCIES[chain]} • {CHAIN_NAMES[chain]}</p>
+          <p className="text-gray-500 text-xs mt-1">{CHAIN_CURRENCIES[chain]} · {CHAIN_NAMES[chain]}</p>
         </div>
 
-        {/* Address */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-4">
-          <p className="text-gray-400 text-sm mb-2">Адрес для оплаты:</p>
+          <p className="text-gray-400 text-sm mb-2">Payment address:</p>
           <code className="text-green-400 text-sm break-all block mb-3">
             {paymentData?.address}
           </code>
@@ -267,25 +262,23 @@ function PaymentContent() {
             onClick={() => navigator.clipboard.writeText(paymentData?.address || '')}
             className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition"
           >
-            📋 Скопировать адрес
+            📋 Copy address
           </button>
         </div>
 
-        {/* QR placeholder */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 mb-4 text-center">
-          <p className="text-gray-400 text-sm mb-3">QR код</p>
+          <p className="text-gray-400 text-sm mb-3">QR Code</p>
           <div className="w-40 h-40 bg-gray-800 rounded-lg mx-auto flex items-center justify-center mb-3">
             <span className="text-gray-600 text-6xl">⬜</span>
           </div>
           <p className="text-gray-500 text-xs">
-            {CHAIN_NAMES[chain]} USDT на адрес выше
+            Send {CHAIN_NAMES[chain]} USDT to the address above
           </p>
         </div>
 
-        {/* Tx Hash input */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5">
           <p className="text-gray-400 text-sm mb-2">
-            После оплаты — вставь tx hash:
+            After sending — paste tx hash:
           </p>
           <textarea
             value={txHash}
@@ -302,15 +295,15 @@ function PaymentContent() {
             disabled={verifying || !txHash.trim()}
             className="w-full mt-3 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg font-medium transition"
           >
-            {verifying ? 'Проверяем...' : '✅ Проверить оплату'}
+            {verifying ? 'Verifying...' : '✅ Verify Payment'}
           </button>
           <p className="text-gray-600 text-xs mt-3 text-center">
-            Подтверждение: 1-3 мин (ETH/Base/Arb) или ~3 сек (Polygon)
+            Confirmation: 1-3 min (ETH/Base/Arb) or ~3 sec (Polygon)
           </p>
         </div>
 
         <button onClick={() => setStep('select')} className="w-full mt-4 text-center text-gray-500 text-sm hover:text-gray-400">
-          ← Выбрать другую сеть
+          ← Choose different network
         </button>
       </main>
     </div>

@@ -35,17 +35,17 @@ export const PLANS = {
   free: {
     name: 'Free',
     priceUsdt: 0,
-    features: ['До 5 markets в watchlist', 'Telegram alerts', 'Уведомления за 24ч'],
+    features: ['Up to 5 markets in watchlist', 'Free Telegram bot', '24h resolution alerts'],
   },
   pro: {
     name: 'Pro',
-    priceUsdt: 50, // $50/month
-    features: ['Unlimited watchlist', 'Priority Telegram alerts', 'Уведомления за 48ч', 'Email digest'],
+    priceUsdt: 4.99, // $4.99/month
+    features: ['Unlimited watchlist', 'Priority Telegram alerts', '48h resolution alerts', 'Daily email digest'],
   },
   trader: {
     name: 'Trader',
-    priceUsdt: 150, // $150/month
-    features: ['Все из Pro', 'Уведомления за 72ч', 'Copy-trading signals', 'Priority support'],
+    priceUsdt: 9.99, // $9.99/month
+    features: ['Everything in Pro', '72h resolution alerts', 'Copy-trading signals', 'Priority support'],
   },
 } as const;
 

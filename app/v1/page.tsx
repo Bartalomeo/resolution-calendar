@@ -189,23 +189,23 @@ function HomeContent() {
           </div>
         </header>
         <main className="max-w-md mx-auto px-4 py-20 text-center">
-          <h2 className="text-2xl font-bold mb-4">Войди чтобы продолжить</h2>
+          <h2 className="text-2xl font-bold mb-4">Sign in to continue</h2>
           <p className="text-gray-400 mb-8">
-            Авторизуйся чтобы сохранять watchlist и получать Telegram уведомления о резолвах.
+            Sign in to save your watchlist and get Telegram alerts when markets resolve.
           </p>
           <div className="space-y-3">
             <a
               href="/auth/login"
               className="block w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-center"
             >
-              Войти / Регистрация
+              Sign In / Register
             </a>
           </div>
           <div className="mt-8 p-4 bg-gray-900 rounded-xl border border-gray-800">
-            <p className="text-gray-500 text-xs mb-2">Без входа:</p>
-            <p className="text-gray-400 text-sm">• Просмотр всех markets</p>
-            <p className="text-gray-400 text-sm">• Нет watchlist</p>
-            <p className="text-gray-400 text-sm">• Нет уведомлений</p>
+            <p className="text-gray-500 text-xs mb-2">Without signing in:</p>
+            <p className="text-gray-400 text-sm">• Browse all markets</p>
+            <p className="text-gray-400 text-sm">• No watchlist</p>
+            <p className="text-gray-400 text-sm">• No alerts</p>
           </div>
         </main>
       </div>
@@ -217,7 +217,7 @@ function HomeContent() {
       {/* Success toast */}
       {showSuccessToast && (
         <div className="fixed top-4 right-4 z-50 bg-green-900 border border-green-700 text-white px-4 py-3 rounded-lg shadow-lg text-sm">
-          ✅ Платеж подтвержден! {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} активирован.
+          ✅ Payment confirmed! {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} activated.
         </div>
       )}
 
@@ -246,7 +246,7 @@ function HomeContent() {
                 }`}
               >
                 {isSubscribed ? currentPlan.toUpperCase() : 'FREE'}
-                {!isSubscribed && ' → BUY'}
+                {!isSubscribed && ' → UPGRADE'}
               </button>
 
               <button
@@ -338,14 +338,14 @@ function HomeContent() {
                 💎 Unlimited watchlist + priority alerts
               </p>
               <p className="text-xs text-gray-400">
-                Free: {WATCHLIST_LIMIT} markets max. Pro $50/мес, Trader $150/мес.
+                Free: {WATCHLIST_LIMIT} markets max. Pro $4.99/mo, Trader $9.99/mo.
               </p>
             </div>
             <button
               onClick={() => setShowUpgradeModal(true)}
               className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
             >
-              BUY →
+              UPGRADE →
             </button>
           </div>
         </div>
@@ -396,31 +396,31 @@ function HomeContent() {
       {showConnectModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-white mb-2">🔔 Подключи Telegram</h2>
+            <h2 className="text-xl font-bold text-white mb-2">🔔 Connect Telegram</h2>
             <p className="text-gray-400 text-sm mb-4">
-              Чтобы получать уведомления о резолвах, привяжи Telegram к профилю.
+              Link your Telegram to get alerts when markets resolve.
             </p>
             <div className="bg-gray-800 rounded-lg p-3 mb-4">
-              <p className="text-gray-400 text-xs mb-1">Твой user ID:</p>
+              <p className="text-gray-400 text-xs mb-1">Your user ID:</p>
               <code className="text-green-400 text-sm break-all">{user?.userId}</code>
             </div>
             <ol className="text-gray-300 text-sm space-y-2 mb-4">
-              <li>1. Открой <a href="https://t.me/ResolutionCalBot" target="_blank" className="text-blue-400 underline">@ResolutionCalBot</a></li>
-              <li>2. Напиши <code className="bg-gray-800 px-1 rounded">/start</code></li>
-              <li>3. Напиши <code className="bg-gray-800 px-1 rounded">/connect {user?.userId}</code></li>
+              <li>1. Open <a href="https://t.me/ResolutionCalBot" target="_blank" className="text-blue-400 underline">@ResolutionCalBot</a></li>
+              <li>2. Send <code className="bg-gray-800 px-1 rounded">/start</code></li>
+              <li>3. Send <code className="bg-gray-800 px-1 rounded">/connect {user?.userId}</code></li>
             </ol>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowConnectModal(false)}
                 className="flex-1 px-4 py-2 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 text-sm"
               >
-                Позже
+                Later
               </button>
               <button
                 onClick={() => navigator.clipboard.writeText(`/connect ${user?.userId}`)}
                 className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
               >
-                📋 Скопировать
+                📋 Copy
               </button>
             </div>
           </div>
@@ -432,7 +432,7 @@ function HomeContent() {
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-white">Выбери план</h2>
+              <h2 className="text-xl font-bold text-white">Choose a plan</h2>
               <button
                 onClick={() => setShowUpgradeModal(false)}
                 className="text-gray-500 hover:text-white text-xl"
@@ -454,7 +454,7 @@ function HomeContent() {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                        <p className="text-xs text-gray-400">${plan.priceUsdt}/мес (USDT)</p>
+                        <p className="text-xs text-gray-400">${plan.priceUsdt}/mo (USDT)</p>
                       </div>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded ${
                         key === 'trader' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
@@ -477,7 +477,7 @@ function HomeContent() {
                           : 'bg-blue-600 hover:bg-blue-700 text-white'
                       }`}
                     >
-                      Купить за ${plan.priceUsdt} USDT
+                      Buy for ${plan.priceUsdt} USDT
                     </button>
                   </div>
                 );
@@ -485,7 +485,7 @@ function HomeContent() {
             </div>
 
             <div className="mt-4 p-3 bg-gray-800 rounded-lg">
-              <p className="text-gray-400 text-xs mb-2">Оплата через:</p>
+              <p className="text-gray-400 text-xs mb-2">Pay with:</p>
               <div className="flex gap-2 flex-wrap">
                 {['Ethereum', 'Base', 'Polygon', 'Arbitrum'].map(net => (
                   <span key={net} className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-300">{net}</span>
