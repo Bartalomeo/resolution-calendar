@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUser, setUser } from '@/lib/redis';
+import { getUser, setUser, UserStore } from '@/lib/redis';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -13,14 +13,14 @@ export async function GET(req: NextRequest) {
 
   if (!user) {
     // Create new user (anonymous)
-    const newUser = {
+    const newUser: UserStore = {
       userId,
       subscribed: false,
-      watchlist: [],
+      watchlist: [] as string[],
       addedAt: new Date().toISOString(),
       subscription: {
-        plan: 'free',
-        status: 'inactive',
+        plan: 'free' as const,
+        status: 'inactive' as const,
       },
     };
     await setUser(userId, newUser);
