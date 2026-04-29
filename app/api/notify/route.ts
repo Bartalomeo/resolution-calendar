@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
       const newWatchlist = await addToWatchlist(userId, marketId);
 
       // If Telegram is connected, send confirmation
-      if (store.chat_id > 0) {
+      if ((store.chat_id ?? 0) > 0) {
         const q = (marketQuestion || '').slice(0, 60);
         await sendMessage(store.chat_id,
           `✅ <b>Добавлено в watchlist:</b>\n\n${q}...\n\n` +
@@ -88,7 +88,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
       const newWatchlist = await removeFromWatchlist(userId, marketId);
-      if (store.chat_id > 0) {
+      if ((store.chat_id ?? 0) > 0) {
         await sendMessage(store.chat_id, `🗑 <b>Удалено из watchlist.</b>\n\nID: ${marketId.slice(0, 20)}...`);
       }
       return NextResponse.json({ success: true, watchlistCount: newWatchlist.length });
