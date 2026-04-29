@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
           const user = await getUser(userId);
           if (user) {
             user.subscription = {
-              plan,
+              plan: plan as 'free' | 'pro' | 'trader',
               status: 'active',
               stripeSessionId: session.id,
               currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         if (userId) {
           const user = await getUser(userId);
           if (user) {
-            user.subscription = { plan: 'free', status: 'inactive' };
+            user.subscription = { plan: 'free', status: 'canceled' };
             await setUser(userId, user);
           }
         }
@@ -58,11 +58,11 @@ export async function POST(req: NextRequest) {
         const userId = subscription.metadata?.userId;
         const plan = subscription.metadata?.plan;
 
-        if (userId && userId !== 'anonymous') {
+        if (userId) {
           const user = await getUser(userId);
           if (user) {
             user.subscription = {
-              plan: plan || 'free',
+              plan: (plan as 'free' | 'pro' | 'trader') || 'free',
               status: subscription.status === 'active' ? 'active' : 'inactive',
               stripeSessionId: subscription.id,
               currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
