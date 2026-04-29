@@ -29,6 +29,34 @@ export default function Home() {
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [telegramConnected, setTelegramConnected] = useState(false);
   const [notifyMarket, setNotifyMarket] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string>('');
+  const [showConnectModal, setShowConnectModal] = useState(false);
+
+  // Initialize userId (anonymous identifier for this browser)
+  useEffect(() => {
+    let uid = localStorage.getItem('rc_user_id');
+    if (!uid) {
+      uid = 'rc_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      localStorage.setItem('rc_user_id', uid);
+    }
+    setUserId(uid);
+
+    // Check if Telegram is connected
+    checkTelegramConnection(uid);
+  }, []);
+
+  const checkTelegramConnection = async (uid: string) => {
+    try {
+      const res = await fetch(`/api/notify?userId=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      setTelegramConnected(data.connected);
+      if (data.watchlist) {
+        setWatchlist(new Set(data.watchlist));
+      }
+    } catch (e) {
+      console.error('Failed to check connection:', e);
+    }
+  };
 
   const loadMarkets = useCallback(async () => {
     try {
@@ -98,13 +126,40 @@ export default function Home() {
   };
 
   const handleNotify = async (market: Market) => {
-    if (!telegramConnected) {
-      setNotifyMarket(market.id);
-      alert('Подключите Telegram для уведомлений. Команда: /start @ResolutionCalBot');
-      return;
+    if (!userId) return;
+    
+    const action = watchlist.has(market.id) ? 'remove' : 'add';
+    
+    try {
+      const res = await fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          marketId: market.id,
+          marketQuestion: market.question,
+          action,
+        }),
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        // Toggle local watchlist state
+        const newWatchlist = new Set(watchlist);
+        if (action === 'add') {
+          newWatchlist.add(market.id);
+          if (!telegramConnected) {
+            setShowConnectModal(true);
+          }
+        } else {
+          newWatchlist.delete(market.id);
+        }
+        setWatchlist(newWatchlist);
+        localStorage.setItem('watchlist', JSON.stringify([...newWatchlist]));
+      }
+    } catch (e) {
+      console.error('Notify error:', e);
     }
-    // TODO: Send to API to register notification
-    alert(`Уведомление настроено для: ${market.question.slice(0, 50)}...`);
   };
 
   const todayCount = markets.filter(m => getHoursUntilResolution(m.endDate) <= 24 && getHoursUntilResolution(m.endDate) > 0).length;
@@ -241,6 +296,43 @@ export default function Home() {
           </div>
         </div>
       </footer>
+
+      {/* Connect Telegram Modal */}
+      {showConnectModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-md w-full p-6">
+            <h2 className="text-xl font-bold text-white mb-2">🔔 Подключи Telegram</h2>
+            <p className="text-gray-400 text-sm mb-4">
+              Чтобы получать уведомления о резолвах, привяжи Telegram к своему профилю.
+            </p>
+            <div className="bg-gray-800 rounded-lg p-3 mb-4">
+              <p className="text-gray-400 text-xs mb-1">Твой ID:</p>
+              <code className="text-green-400 text-sm break-all">{userId}</code>
+            </div>
+            <ol className="text-gray-300 text-sm space-y-2 mb-4">
+              <li>1. Открой <a href="https://t.me/ResolutionCalBot" target="_blank" className="text-blue-400 underline">@ResolutionCalBot</a></li>
+              <li>2. Напиши <code className="bg-gray-800 px-1 rounded">/start</code></li>
+              <li>3. Напиши <code className="bg-gray-800 px-1 rounded">/connect {userId}</code></li>
+            </ol>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowConnectModal(false)}
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 text-sm"
+              >
+                Позже
+              </button>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`/connect ${userId}`);
+                }}
+                className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
+              >
+                📋 Скопировать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
