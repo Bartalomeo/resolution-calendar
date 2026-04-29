@@ -114,7 +114,8 @@ async function handleCommand(text: string, chat_id: number, username: string) {
       return;
     }
     const markets = await getActiveMarkets() as any[];
-    const userMarkets = markets.filter((m: any) => store.watchlist.includes(m.id)).slice(0, 20);
+    const wl = store?.watchlist || [];
+    const userMarkets = markets.filter((m: any) => wl.includes(m.id)).slice(0, 20);
 
     if (userMarkets.length === 0) {
       await sendMessage(chat_id, 'Ни одного из твоих рынков сейчас не активно.');
