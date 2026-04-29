@@ -19,7 +19,7 @@ import { PLANS as CRYPTO_PLANS } from '@/lib/crypto';
 import type { Subscription, UserStore } from '@/lib/redis';
 
 type View = 'today' | 'week' | 'month' | 'resolved';
-type Category = 'all' | 'crypto' | 'politics' | 'sports' | 'economy' | 'tech' | 'other';
+type Category = 'all' | 'crypto' | 'politics' | 'sports' | 'economy' | 'tech' | 'entertainment' | 'legal' | 'other';
 
 function HomeContent() {
   const router = useRouter();
@@ -312,6 +312,8 @@ function HomeContent() {
               { key: 'sports' as Category, label: '⚽ Sports' },
               { key: 'economy' as Category, label: '📈 Economy' },
               { key: 'tech' as Category, label: '💻 Tech' },
+              { key: 'entertainment' as Category, label: '🎬 Entmt' },
+              { key: 'legal' as Category, label: '⚖️ Legal' },
             ].map(cat => (
               <button
                 key={cat.key}

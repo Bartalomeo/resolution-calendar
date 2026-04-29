@@ -151,24 +151,57 @@ export function getResolutionLabel(endDate: string): string {
 }
 
 export function detectCategory(market: Market): string {
-  const text = `${market.question} ${market.description} ${(market.tags || []).join(' ')}`.toLowerCase();
-  
-  if (/bitcoin|ethereum|crypto|defi|nft|wallet|blockchain|solana|bnb|ripple|cardano|polkadot|avalanche|matic/i.test(text)) {
+  const q = (market.question || '').toLowerCase();
+  const d = (market.description || '').toLowerCase();
+  const tags = (market.tags || []).map((t: string) => t.toLowerCase()).join(' ');
+  const text = `${q} ${d} ${tags}`;
+
+  // Use word boundaries to avoid false matches
+  const has = (kw: string) => {
+    // Match whole word only — \b doesn't work with punctuation, so use space/punctuation boundaries
+    return new RegExp(`(?:^|[\\s,\\-\\(\\)\\/"'])${kw}(?:[\\s,\\-\\(\\)\\/"']|$)`, 'i').test(text);
+  };
+
+  // Crypto — explicit, no false matches
+  if (/\b(bitcoin|ethereum|crypto|defi|nft\s|wallet|blockchain|solana|bnb|ripple|cardano|polkadot|avalanche|matic|binance)\b/i.test(text)) {
     return 'crypto';
   }
-  if (/trump|biden|election|president|congress|senate|vote|republican|democrat|nato|war|ukraine|russia|china|iran|korea|israel|palestine/i.test(text)) {
+
+  // Politics — elections, wars, governments
+  if (/\b(trump|biden|election\s|president\s|congress|senate|vote\s|voting|republican|democrat|nato|war\s|ukraine|russia|iran|korea|israel|palestine|china\s|taiwan|inflation|genocide)\b/i.test(text)) {
     return 'politics';
   }
-  if (/nba|nfl|mlb|nhl|uefa|fifa|world cup|olympics|tennis|championship|league|match|game|score/i.test(text)) {
+
+  // Sports — teams, leagues, scores, tournaments
+  if (/\b(nba|nfl|mlb|nhl|uefa|fifa|world cup|olympics|tennis|championship\s|league\s|match\s|score\s|win\s|the\s+\d|season\s|playoff|strike\s|mvp|cup\s|final\s)\b/i.test(text)) {
     return 'sports';
   }
-  if (/fed|inflation|recession|gdp|interest rate|oil|gold|dollar|euro|unemployment|treasury|stock market|nasdaq|s&p/i.test(text)) {
+
+  // Economy — monetary policy, macro, finance (but NOT sports teams)
+  if (/\b(fed\s|federal reserve|interest rate|inflation\s|recession|gdp\s|treasury|bond\s|yield\s|nasdaq|s&p\s|dow jones|stock market|unemployment\s|jobs report|oil price|gold price|dollar index|monetary policy|banking crisis)\b/i.test(text)) {
     return 'economy';
   }
-  if (/ai|openai|gpt|chatgpt|claude|gemini|anthropic|neural|robot|spacex|nasa|tech|apple|microsoft|google|meta|amazon|tesla/i.test(text)) {
+
+  // Tech — AI/ML, big tech companies, space, internet
+  if (/\b(artificial intelligence|openai|gpt[ -]|chatgpt|claude\s|gemini\s|anthropic|neural network|spacex|nasa\s|cyberattack|quantum|internet outage)\b/i.test(text)) {
     return 'tech';
   }
-  
+
+  // Entertainment — music albums, movies, TV shows, gaming, celebrity
+  if (/\b(gta\s|album\s|music\s|concert\s|tour\s|rapper|singer|band|movie\s|tv show|series\s|netflix|disney|hbo|streaming|video game|playstation|xbox|nintendo|steam|rockstar|trevor|franklin|lucia)\b/i.test(text)) {
+    return 'entertainment';
+  }
+
+  // Science — medical, research, discovery
+  if (/\b(vaccine\s|disease\s|cure\s|cancer\s|fda|approval|clinical trial|space launch|moon\s|mars\s|satellite|stem cell|genome|crispr)\b/i.test(text)) {
+    return 'science';
+  }
+
+  // Legal — court cases, sentencing, charges
+  if (/\b(sentenc|convict|arrest|indict|charge\s|plea|trial\s|court|lawsuit|verdict|jury|attorney|lawyer|harvey weinstein|felon|prison\s|jail\s)\b/i.test(text)) {
+    return 'legal';
+  }
+
   return 'other';
 }
 
@@ -178,6 +211,9 @@ export const CATEGORY_COLORS: Record<string, string> = {
   sports: '#10B981',
   economy: '#8B5CF6',
   tech: '#EC4899',
+  entertainment: '#F59E0B',
+  science: '#06B6D4',
+  legal: '#EF4444',
   other: '#6B7280',
 };
 
@@ -187,5 +223,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   sports: '⚽ Sports',
   economy: '📈 Economy',
   tech: '💻 Tech',
+  entertainment: '🎬 Entertainment',
+  science: '🔬 Science',
+  legal: '⚖️ Legal',
   other: '📌 Other',
 };
