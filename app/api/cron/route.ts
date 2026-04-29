@@ -1,15 +1,8 @@
 import { NextResponse } from 'next/server';
-
-// Cron endpoint - Vercel Cron requires Hobby or Pro plan
-// Runs every 5 minutes to check for markets resolving soon
+import { getUser, getAllUserIds } from '@/lib/redis';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
-
-// In-memory stores (same as telegram route - resets on cold start)
-// IMPORTANT: This only works if Vercel keeps the Lambda warm
-// For production: use Upstash Redis for persistence
-const userStores: Record<string, { chat_id: number; username: string; subscribed: boolean; watchlist: string[] }> = {};
 
 async function sendMessage(chat_id: number, text: string): Promise<void> {
   await fetch(`${TELEGRAM_API}/sendMessage`, {
@@ -61,27 +54,24 @@ function formatMarketAlert(market: any): string {
 }
 
 export async function GET(req: Request) {
-  // Verify cron secret (optional security)
-  const authHeader = req.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET;
-  
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
     const markets = await getActiveMarkets() as any[];
     const now = new Date();
 
+    // Get ALL user IDs from Redis
+    const allUserIds = await getAllUserIds();
+
     let notified = 0;
     let errors = 0;
+    let usersChecked = 0;
 
-    // Iterate through all users
-    for (const [userId, user] of Object.entries(userStores)) {
-      if (!user.subscribed || !user.chat_id || user.watchlist.length === 0) {
+    for (const userId of allUserIds) {
+      const user = await getUser(userId);
+      if (!user || !user.subscribed || !user.chat_id || user.watchlist.length === 0) {
         continue;
       }
 
+      usersChecked++;
       const chatId = user.chat_id;
 
       for (const marketId of user.watchlist) {
@@ -98,7 +88,6 @@ export async function GET(req: Request) {
             const msg = formatMarketAlert(market);
             await sendMessage(chatId, msg);
             notified++;
-            // Small delay to avoid Telegram rate limits
             await new Promise(r => setTimeout(r, 100));
           } catch (e) {
             errors++;
@@ -110,7 +99,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       success: true,
-      checked: markets.length,
+      marketsChecked: markets.length,
+      usersChecked,
       notified,
       errors,
       timestamp: new Date().toISOString(),

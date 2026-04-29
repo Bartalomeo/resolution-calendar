@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as crypto from 'crypto';
+import {
+  getUser, setUser, deleteUser, setChatIdIndex, deleteChatIdIndex,
+  addToWatchlist, removeFromWatchlist, getAllUserIds, getUserIdByChatId,
+  UserStore
+} from '@/lib/redis';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const VERIFY_TOKEN = process.env.TELEGRAM_VERIFY_TOKEN!;
 
-// In-memory user store (persists within same Lambda instance, resets on cold start)
-// For production: replace with Upstash Redis
-const userStores: Record<string, { chat_id: number; username: string; subscribed: boolean; watchlist: string[]; addedAt?: string }> = {};
-
 function isValidTelegramRequest(req: NextRequest): boolean {
   const secret = crypto.createHmac('sha256', TELEGRAM_BOT_TOKEN).digest('hex');
-  return true; // Vercel already validates the webhook signature via headers
+  return true;
 }
 
 async function sendMessage(chat_id: number, text: string): Promise<void> {
@@ -34,41 +35,25 @@ async function getActiveMarkets() {
   return res.json();
 }
 
-function formatMarketAlert(market: any): string {
-  const question = market.question || 'Unknown';
-  const volume = parseFloat(market.volume || '0');
-  const slug = market.slug || '';
-  const outcomes = market.outcomes || ['Yes', 'No'];
-  const prices = market.outcomePrices || ['0.5', '0.5'];
-
-  const priceStr = outcomes.map((o: string, i: number) => `${o}: ${(parseFloat(prices[i]) * 100).toFixed(0)}%`).join(' | ');
-  
-  const volStr = volume >= 1_000_000 ? `$${(volume / 1_000_000).toFixed(1)}M` :
-                 volume >= 1_000 ? `$${(volume / 1_000).toFixed(0)}K` : `$${volume.toFixed(0)}`;
-
-  const endDate = market.endDate || '';
-  const end = new Date(endDate);
-  const now = new Date();
-  const diff = end.getTime() - now.getTime();
-  
-  let timeStr = endDate.slice(0, 10);
-  if (diff > 0 && diff < 86400000) timeStr = `${Math.floor(diff / 3600000)}h`;
-  if (diff > 0 && diff < 3600000) timeStr = `${Math.floor(diff / 60000)}m`;
-  if (diff < 0) timeStr = 'RESOLVED';
-
-  const link = `https://polymarket.com/event/${slug}`;
-
-  return `⏰ <b>Market Resolving Soon!</b>\n\n📌 <b>${question}</b>\n\n💰 ${priceStr}\n📊 Volume: ${volStr} | ⏱ ${timeStr}\n🔗 ${link}`;
-}
-
 async function handleCommand(text: string, chat_id: number, username: string) {
+  // Find userId by chat_id
+  let userId = await getUserIdByChatId(chat_id);
+  let store = userId ? await getUser(userId) : null;
+
   if (text === '/start' || text === '/start@ResolutionCalBot') {
-    userStores[String(chat_id)] = {
+    // Auto-generate a userId for this user if not exists
+    if (!userId) {
+      userId = `tg_${chat_id}`;
+    }
+    const newUser: UserStore = {
       chat_id,
       username,
       subscribed: true,
       watchlist: [],
+      addedAt: new Date().toISOString(),
     };
+    await setUser(userId, newUser);
+    await setChatIdIndex(chat_id, userId);
     await sendMessage(chat_id,
       `📅 <b>Resolution Calendar Bot</b>\n\n` +
       `Я буду присылать уведомления когда рынки в твоём watchlist близятся к resolution.\n\n` +
@@ -120,13 +105,12 @@ async function handleCommand(text: string, chat_id: number, username: string) {
     await sendMessage(chat_id, msg);
   }
   else if (text === '/watchlist' || text === '/watchlist@ResolutionCalBot') {
-    const store = userStores[String(chat_id)];
     if (!store) {
       await sendMessage(chat_id, 'Ты не подписан. Напиши /start');
       return;
     }
     if (store.watchlist.length === 0) {
-      await sendMessage(chat_id, '📋 Твой watchlist пуст.\n\nДобавь рынки через /add <market_id>');
+      await sendMessage(chat_id, '📋 Твой watchlist пуст.\n\nДобавь рынки через /add <market_id> или на сайте.');
       return;
     }
     const markets = await getActiveMarkets() as any[];
@@ -141,36 +125,38 @@ async function handleCommand(text: string, chat_id: number, username: string) {
     for (const m of userMarkets) {
       const price = `${(parseFloat(m.outcomePrices?.[0] || '0.5') * 100).toFixed(0)}%`;
       const end = (m.endDate || '').slice(0, 10);
-      msg += `\n• ${(m.question || '').slice(0, 50)}...\n  ${price} | ${end}`;
+      const diff = new Date(m.endDate).getTime() - new Date().getTime();
+      const timeStr = diff < 0 ? 'RESOLVED' : diff < 86400000 ? `${Math.floor(diff / 3600000)}h` : end;
+      msg += `\n• ${(m.question || '').slice(0, 50)}\n  ${price} | ⏰ ${timeStr}`;
     }
     await sendMessage(chat_id, msg);
   }
   else if (text === '/stop' || text === '/stop@ResolutionCalBot') {
-    delete userStores[String(chat_id)];
-    // Also remove from chatIdToUserId mapping
-    for (const [uid, store] of Object.entries(userStores)) {
-      if (store.chat_id === chat_id) {
-        delete userStores[uid];
-        break;
-      }
+    if (userId) {
+      await deleteUser(userId);
+      await deleteChatIdIndex(chat_id);
     }
     await sendMessage(chat_id, '✅ Отписан от уведомлений. Напиши /start чтобы подписаться снова.');
   }
   else if (text.startsWith('/connect ')) {
-    const userId = text.slice(9).trim();
-    if (!userId || userId.length < 10) {
+    const siteUserId = text.slice(9).trim();
+    if (!siteUserId || siteUserId.length < 10) {
       await sendMessage(chat_id, '❌ Неверный ID. Перейди на сайт и нажми "Connect Telegram".');
       return;
     }
-    userStores[userId] = {
+    // Link this chat_id to the site userId
+    const existingStore = await getUser(siteUserId);
+    const linkedUser: UserStore = {
       chat_id,
       username,
       subscribed: true,
-      watchlist: [],
-      addedAt: new Date().toISOString(),
+      watchlist: existingStore?.watchlist || [],
+      addedAt: existingStore?.addedAt || new Date().toISOString(),
     };
+    await setUser(siteUserId, linkedUser);
+    await setChatIdIndex(chat_id, siteUserId);
     await sendMessage(chat_id,
-      `✅ <b> Telegram подключен!</b>\n\n` +
+      `✅ <b>Telegram подключен!</b>\n\n` +
       `Теперь все рынки которые ты добавишь на сайте будут отображаться в /watchlist.\n\n` +
       `Как добавить рынок:\n` +
       `1. Найди рынок на сайте\n` +
@@ -181,24 +167,29 @@ async function handleCommand(text: string, chat_id: number, username: string) {
   }
   else if (text.startsWith('/add ')) {
     const marketId = text.slice(5).trim();
-    const store = userStores[String(chat_id)];
-    if (!store) {
-      await sendMessage(chat_id, 'Ты не подписан. Напиши /start');
-      return;
+    if (!userId) {
+      // Auto-create user
+      userId = `tg_${chat_id}`;
+      const newUser: UserStore = {
+        chat_id, username, subscribed: true, watchlist: [], addedAt: new Date().toISOString()
+      };
+      await setUser(userId, newUser);
+      await setChatIdIndex(chat_id, userId);
+      store = newUser;
     }
-    if (!store.watchlist.includes(marketId)) {
-      store.watchlist.push(marketId);
+    if (store) {
+      await addToWatchlist(userId, marketId);
+      store.watchlist = await addToWatchlist(userId, marketId);
     }
     await sendMessage(chat_id, `✅ Добавлено в watchlist.\n\nID: ${marketId.slice(0, 20)}...`);
   }
   else if (text.startsWith('/remove ')) {
     const marketId = text.slice(8).trim();
-    const store = userStores[String(chat_id)];
-    if (!store) {
+    if (!userId || !store) {
       await sendMessage(chat_id, 'Ты не подписан. Напиши /start');
       return;
     }
-    store.watchlist = store.watchlist.filter((id: string) => id !== marketId);
+    store.watchlist = await removeFromWatchlist(userId, marketId);
     await sendMessage(chat_id, '✅ Удалено из watchlist.');
   }
   else {
@@ -225,7 +216,6 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// Required for Telegram webhook verification
 export async function GET(req: NextRequest) {
   const token = req.nextUrl.searchParams.get('hub.verify_token');
   const challenge = req.nextUrl.searchParams.get('hub.challenge');

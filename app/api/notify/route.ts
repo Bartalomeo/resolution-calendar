@@ -1,24 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  getUser, setUser, getUserIdByChatId, setChatIdIndex,
+  addToWatchlist, removeFromWatchlist, UserStore
+} from '@/lib/redis';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
-
-// In-memory user store (persists within same Lambda instance, resets on cold start)
-// For production: replace with Upstash Redis
-interface UserStore {
-  chat_id: number;
-  username: string;
-  subscribed: boolean;
-  watchlist: string[];
-  addedAt: string;
-}
-
-// Maps from site-generated anonymous ID to user's Telegram chat_id
-// Key: anonymous_id (stored in localStorage on site), Value: UserStore
-const userIdMap: Record<string, UserStore> = {};
-
-// Maps from Telegram chat_id to anonymous_id
-const chatIdToUserId: Record<string, string> = {};
 
 async function sendMessage(chat_id: number, text: string): Promise<void> {
   await fetch(`${TELEGRAM_API}/sendMessage`, {
@@ -33,24 +20,22 @@ async function sendMessage(chat_id: number, text: string): Promise<void> {
   });
 }
 
-// POST /api/notify — site calls this when user clicks "Notify"
+// POST /api/notify
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { userId, marketId, marketQuestion, action } = body;
 
     if (action === 'check') {
-      // Check if user has connected Telegram
-      const store = userIdMap[userId];
+      const store = userId ? await getUser(userId) : null;
       return NextResponse.json({
-        connected: !!store,
+        connected: !!store?.chat_id,
         watchlistCount: store?.watchlist?.length || 0,
       });
     }
 
     if (action === 'watchlist') {
-      // Return user's current watchlist
-      const store = userIdMap[userId];
+      const store = userId ? await getUser(userId) : null;
       return NextResponse.json({
         watchlist: store?.watchlist || [],
         count: store?.watchlist?.length || 0,
@@ -58,53 +43,53 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'add') {
-      // Add market to watchlist
       if (!userId) {
         return NextResponse.json({ error: 'No userId' }, { status: 400 });
       }
 
-      let store = userIdMap[userId];
+      let store = await getUser(userId);
 
       if (!store) {
-        // User hasn't connected Telegram yet — store locally and prompt
-        userIdMap[userId] = {
+        // User hasn't connected Telegram yet — create placeholder
+        const placeholder: UserStore = {
           chat_id: 0,
           username: '',
           subscribed: false,
           watchlist: [],
           addedAt: new Date().toISOString(),
         };
-        store = userIdMap[userId];
+        await setUser(userId, placeholder);
+        store = placeholder;
       }
 
-      if (!store.watchlist.includes(marketId)) {
-        store.watchlist.push(marketId);
-      }
+      const newWatchlist = await addToWatchlist(userId, marketId);
 
-      // If user has connected Telegram, send confirmation
+      // If Telegram is connected, send confirmation
       if (store.chat_id > 0) {
-        const q = (marketQuestion || '').slice(0, 50);
+        const q = (marketQuestion || '').slice(0, 60);
         await sendMessage(store.chat_id,
-          `✅ <b>Добавлено в watchlist:</b>\n\n${q}...\n\nID: ${marketId.slice(0, 20)}...\n\nИспользуй /watchlist чтобы увидеть все рынки или /remove ${marketId} чтобы убрать.`
+          `✅ <b>Добавлено в watchlist:</b>\n\n${q}...\n\n` +
+          `ID: ${marketId.slice(0, 20)}...\n\n` +
+          `/watchlist — все рынки | /remove ${marketId} — убрать`
         );
       }
 
-      return NextResponse.json({ success: true, watchlistCount: store.watchlist.length });
+      return NextResponse.json({ success: true, watchlistCount: newWatchlist.length });
     }
 
     if (action === 'remove') {
       if (!userId) {
         return NextResponse.json({ error: 'No userId' }, { status: 400 });
       }
-      const store = userIdMap[userId];
-      if (store) {
-        store.watchlist = store.watchlist.filter(id => id !== marketId);
-        if (store.chat_id > 0) {
-          await sendMessage(store.chat_id, `🗑 <b>Удалено из watchlist.</b>\n\nID: ${marketId.slice(0, 20)}...`);
-        }
-        return NextResponse.json({ success: true, watchlistCount: store.watchlist.length });
+      const store = await getUser(userId);
+      if (!store) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
       }
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      const newWatchlist = await removeFromWatchlist(userId, marketId);
+      if (store.chat_id > 0) {
+        await sendMessage(store.chat_id, `🗑 <b>Удалено из watchlist.</b>\n\nID: ${marketId.slice(0, 20)}...`);
+      }
+      return NextResponse.json({ success: true, watchlistCount: newWatchlist.length });
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 });
@@ -114,13 +99,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET /api/notify — returns current watchlist for a userId
+// GET /api/notify
 export async function GET(req: NextRequest) {
   const userId = req.nextUrl.searchParams.get('userId');
   if (!userId) {
     return NextResponse.json({ error: 'No userId' }, { status: 400 });
   }
-  const store = userIdMap[userId];
+  const store = await getUser(userId);
   return NextResponse.json({
     watchlist: store?.watchlist || [],
     connected: !!store?.chat_id,
