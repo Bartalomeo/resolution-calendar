@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { stripe, PLANS } from '@/lib/stripe';
+import { getStripe, PLANS } from '@/lib/stripe';
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
 
     // Create Stripe Checkout Session
     const baseUrl = req.headers.get('origin') || 'https://resolution-calendar.vercel.app';
+    const stripe = getStripe();
 
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',

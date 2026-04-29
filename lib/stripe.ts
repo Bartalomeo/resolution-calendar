@@ -1,9 +1,5 @@
 import Stripe from 'stripe';
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2026-04-22.dahlia',
-});
-
 export const PLANS = {
   free: {
     name: 'Free',
@@ -19,7 +15,6 @@ export const PLANS = {
     name: 'Pro',
     price: 499, // $4.99
     interval: 'month' as const,
-    priceId: process.env.STRIPE_PRO_PRICE_ID!,
     features: [
       'Unlimited watchlist',
       'Priority Telegram alerts',
@@ -31,7 +26,6 @@ export const PLANS = {
     name: 'Trader',
     price: 1499, // $14.99
     interval: 'month' as const,
-    priceId: process.env.STRIPE_TRADER_PRICE_ID!,
     features: [
       'Все из Pro',
       'Уведомления за 72 часа',
@@ -42,3 +36,14 @@ export const PLANS = {
 } as const;
 
 export type PlanKey = keyof typeof PLANS;
+
+// Lazy Stripe instance — avoids build-time initialization error
+let _stripe: Stripe | null = null;
+export function getStripe(): Stripe {
+  if (!_stripe) {
+    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
+      apiVersion: '2026-04-22.dahlia',
+    });
+  }
+  return _stripe;
+}
