@@ -57,6 +57,7 @@ export async function POST(req: NextRequest) {
         const subscription = event.data.object as Stripe.Subscription;
         const userId = subscription.metadata?.userId;
         const plan = subscription.metadata?.plan;
+        const subData = subscription as any;
 
         if (userId) {
           const user = await getUser(userId);
@@ -65,7 +66,9 @@ export async function POST(req: NextRequest) {
               plan: (plan as 'free' | 'pro' | 'trader') || 'free',
               status: subscription.status === 'active' ? 'active' : 'inactive',
               stripeSessionId: subscription.id,
-              currentPeriodEnd: new Date(subscription.current_period_end * 1000).toISOString(),
+              currentPeriodEnd: subData.current_period_end
+                ? new Date(subData.current_period_end * 1000).toISOString()
+                : undefined,
             };
             await setUser(userId, user);
           }
