@@ -1,6 +1,7 @@
 import { Market } from './types';
 
 const GAMMA_API = 'https://gamma-api.polymarket.com';
+const MARKETS_PROXY = '/api/markets';
 const HEADERS = {
   'Accept': 'application/json',
   'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
@@ -19,12 +20,13 @@ export async function getActiveMarkets(limit = 200): Promise<Market[]> {
   }
 
   try {
-    const url = `${GAMMA_API}/markets?closed=false&limit=${limit}`;
-    const req = new Request(url, { headers: HEADERS });
+    // Use our own proxy to avoid CORS issues when calling from browser
+    const proxyUrl = `${MARKETS_PROXY}?limit=${limit}`;
+    const req = new Request(proxyUrl, { headers: HEADERS });
     const resp = await fetch(req);
     
     if (!resp.ok) {
-      throw new Error(`API error: ${resp.status}`);
+      throw new Error(`Proxy error: ${resp.status}`);
     }
     
     const data: Market[] = await resp.json();
@@ -54,11 +56,12 @@ export async function getActiveMarkets(limit = 200): Promise<Market[]> {
 
 export async function getResolvedMarkets(limit = 100): Promise<Market[]> {
   try {
-    const url = `${GAMMA_API}/markets?closed=true&limit=${limit}`;
-    const req = new Request(url, { headers: HEADERS });
+    // Use our proxy
+    const proxyUrl = `${MARKETS_PROXY}?limit=${limit}&closed=true`;
+    const req = new Request(proxyUrl, { headers: HEADERS });
     const resp = await fetch(req);
     
-    if (!resp.ok) throw new Error(`API error: ${resp.status}`);
+    if (!resp.ok) throw new Error(`Proxy error: ${resp.status}`);
     
     const data: Market[] = await resp.json();
     const resolved = data
