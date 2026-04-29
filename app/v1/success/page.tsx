@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-export default function SuccessPage() {
+function SuccessContent() {
   const params = useSearchParams();
   const sessionId = params.get('session_id');
   const plan = params.get('plan');
@@ -14,13 +14,9 @@ export default function SuccessPage() {
       setStatus('error');
       return;
     }
-
-    // Call verify endpoint to confirm payment
     fetch(`/api/stripe/verify?session_id=${sessionId}&plan=${plan}`)
       .then((res) => res.json())
-      .then((data) => {
-        setStatus(data.success ? 'success' : 'error');
-      })
+      .then((data) => setStatus(data.success ? 'success' : 'error'))
       .catch(() => setStatus('error'));
   }, [sessionId, plan]);
 
@@ -63,5 +59,17 @@ export default function SuccessPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SuccessPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <div className="w-12 h-12 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <SuccessContent />
+    </Suspense>
   );
 }
