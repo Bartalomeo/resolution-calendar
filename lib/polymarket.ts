@@ -138,6 +138,18 @@ export function isResolved(endDate: string): boolean {
   return new Date(endDate).getTime() < Date.now();
 }
 
+export function getResolutionLabel(endDate: string): string {
+  const hours = getHoursUntilResolution(endDate);
+  const days = getDaysUntilResolution(endDate);
+
+  if (hours <= 0) return 'Resolved';
+  if (hours < 1) return `${getMinutesUntilResolution(endDate)}m`;
+  if (hours < 24) return `${hours}h`;
+  if (days < 7) return `${days}d`;
+  if (days < 30) return `${Math.ceil(days / 7)}w`;
+  return new Date(endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 export function detectCategory(market: Market): string {
   const q = (market.question || '').toLowerCase();
   const d = (market.description || '').toLowerCase();
