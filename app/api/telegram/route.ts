@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import * as crypto from 'crypto';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
 const VERIFY_TOKEN = process.env.TELEGRAM_VERIFY_TOKEN!;
 
-// In-memory user store (for demo - in production use a database)
-const userStores: Record<string, { chat_id: number; username: string; subscribed: boolean; watchlist: string[] }> = {};
+// In-memory user store (persists within same Lambda instance, resets on cold start)
+// For production: replace with Upstash Redis
+const userStores: Record<string, { chat_id: number; username: string; subscribed: boolean; watchlist: string[]; addedAt?: string }> = {};
 
 function isValidTelegramRequest(req: NextRequest): boolean {
   const secret = crypto.createHmac('sha256', TELEGRAM_BOT_TOKEN).digest('hex');
@@ -29,7 +30,6 @@ async function sendMessage(chat_id: number, text: string): Promise<void> {
 async function getActiveMarkets() {
   const res = await fetch('https://gamma-api.polymarket.com/markets?closed=false&limit=200', {
     headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' },
-    next: { revalidate: 60 },
   });
   return res.json();
 }
@@ -147,7 +147,37 @@ async function handleCommand(text: string, chat_id: number, username: string) {
   }
   else if (text === '/stop' || text === '/stop@ResolutionCalBot') {
     delete userStores[String(chat_id)];
+    // Also remove from chatIdToUserId mapping
+    for (const [uid, store] of Object.entries(userStores)) {
+      if (store.chat_id === chat_id) {
+        delete userStores[uid];
+        break;
+      }
+    }
     await sendMessage(chat_id, '✅ Отписан от уведомлений. Напиши /start чтобы подписаться снова.');
+  }
+  else if (text.startsWith('/connect ')) {
+    const userId = text.slice(9).trim();
+    if (!userId || userId.length < 10) {
+      await sendMessage(chat_id, '❌ Неверный ID. Перейди на сайт и нажми "Connect Telegram".');
+      return;
+    }
+    userStores[userId] = {
+      chat_id,
+      username,
+      subscribed: true,
+      watchlist: [],
+      addedAt: new Date().toISOString(),
+    };
+    await sendMessage(chat_id,
+      `✅ <b> Telegram подключен!</b>\n\n` +
+      `Теперь все рынки которые ты добавишь на сайте будут отображаться в /watchlist.\n\n` +
+      `Как добавить рынок:\n` +
+      `1. Найди рынок на сайте\n` +
+      `2. Нажми 🔔 Notify\n` +
+      `3. Рынок появится здесь\n\n` +
+      `/watchlist — показать все рынки`
+    );
   }
   else if (text.startsWith('/add ')) {
     const marketId = text.slice(5).trim();
