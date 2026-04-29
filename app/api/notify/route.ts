@@ -52,11 +52,13 @@ export async function POST(req: NextRequest) {
       if (!store) {
         // User hasn't connected Telegram yet — create placeholder
         const placeholder: UserStore = {
+          userId,
           chat_id: 0,
           username: '',
           subscribed: false,
           watchlist: [],
           addedAt: new Date().toISOString(),
+          subscription: { plan: 'free', status: 'inactive' },
         };
         await setUser(userId, placeholder);
         store = placeholder;
