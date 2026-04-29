@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Market } from '@/lib/types';
 import {
   getActiveMarkets,
@@ -15,14 +15,14 @@ import {
   CATEGORY_COLORS,
   CATEGORY_LABELS,
 } from '@/lib/polymarket';
-import { PLANS } from '@/lib/stripe';
-import type { Subscription } from '@/lib/redis';
+import { PLANS as CRYPTO_PLANS } from '@/lib/crypto';
+import type { Subscription, UserStore } from '@/lib/redis';
 
 type View = 'today' | 'week' | 'month' | 'resolved';
 type Category = 'all' | 'crypto' | 'politics' | 'sports' | 'economy' | 'tech' | 'other';
-type Plan = 'free' | 'pro' | 'trader';
 
 function HomeContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [markets, setMarkets] = useState<Market[]>([]);
   const [resolved, setResolved] = useState<Market[]>([]);
@@ -33,62 +33,40 @@ function HomeContent() {
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [telegramConnected, setTelegramConnected] = useState(false);
-  const [userId, setUserId] = useState<string>('');
+  const [user, setUser] = useState<UserStore | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  const [checkingOut, setCheckingOut] = useState<string | null>(null);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
 
-  // Initialize userId
-  useEffect(() => {
-    let uid = localStorage.getItem('rc_user_id');
-    if (!uid) {
-      uid = 'rc_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-      localStorage.setItem('rc_user_id', uid);
-    }
-    setUserId(uid);
-
-    // Check success/canceled from URL
-    if (searchParams.get('success') === '1') {
-      setShowSuccessToast(true);
-      setTimeout(() => setShowSuccessToast(false), 5000);
-    }
-  }, [searchParams]);
-
-  // Load user data (subscription + watchlist)
-  const loadUserData = useCallback(async (uid: string) => {
+  // Load session on mount
+  const loadSession = useCallback(async () => {
     try {
-      const res = await fetch(`/api/user?userId=${encodeURIComponent(uid)}`);
+      const res = await fetch('/api/auth/session');
       const data = await res.json();
-      setSubscription(data.subscription || { plan: 'free', status: 'inactive' });
-      if (data.watchlist) {
-        setWatchlist(new Set(data.watchlist));
-      }
-      if (data.chat_id) {
-        setTelegramConnected(true);
+      if (data.user) {
+        setUser(data.user);
+        setWatchlist(new Set(data.user.watchlist || []));
+        if (data.user.chat_id) setTelegramConnected(true);
+      } else {
+        setUser(null);
       }
     } catch (e) {
-      console.error('Failed to load user:', e);
+      console.error('Session error:', e);
     }
   }, []);
 
   useEffect(() => {
-    if (userId) {
-      loadUserData(userId);
-      checkTelegramConnection(userId);
-    }
-  }, [userId, loadUserData]);
+    loadSession();
+  }, [loadSession]);
 
-  const checkTelegramConnection = async (uid: string) => {
-    try {
-      const res = await fetch(`/api/notify?userId=${encodeURIComponent(uid)}`);
-      const data = await res.json();
-      setTelegramConnected(data.connected);
-    } catch (e) {
-      console.error('Failed to check connection:', e);
+  // Check URL params for payment success
+  useEffect(() => {
+    if (searchParams.get('payment') === 'success') {
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 5000);
     }
-  };
+  }, [searchParams]);
 
   const loadMarkets = useCallback(async () => {
     try {
@@ -116,8 +94,8 @@ function HomeContent() {
     return () => clearInterval(interval);
   }, [loadMarkets]);
 
-  const currentPlan: Plan = subscription?.plan || 'free';
-  const isSubscribed = subscription?.status === 'active';
+  const currentPlan = user?.subscription?.plan || 'free';
+  const isSubscribed = user?.subscription?.status === 'active';
   const WATCHLIST_LIMIT = isSubscribed ? 999 : 5;
   const canAddToWatchlist = watchlist.size < WATCHLIST_LIMIT || isSubscribed;
 
@@ -134,93 +112,112 @@ function HomeContent() {
   const watchlistMarkets = markets.filter(m => watchlist.has(m.id));
   const displayedMarkets = showWatchlist ? watchlistMarkets : filteredMarkets;
 
-  const toggleWatchlist = (id: string) => {
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.replace('/auth/login');
+  };
+
+  const toggleWatchlist = async (id: string) => {
+    if (!user) return;
     if (!canAddToWatchlist && !watchlist.has(id)) {
       setShowUpgradeModal(true);
       return;
     }
+    const action = watchlist.has(id) ? 'remove' : 'add';
     const newWatchlist = new Set(watchlist);
-    if (newWatchlist.has(id)) {
-      newWatchlist.delete(id);
-    } else {
-      if (newWatchlist.size >= WATCHLIST_LIMIT && !isSubscribed) {
-        setShowUpgradeModal(true);
-        return;
-      }
-      newWatchlist.add(id);
-    }
+    if (action === 'add') newWatchlist.add(id);
+    else newWatchlist.delete(id);
     setWatchlist(newWatchlist);
-    localStorage.setItem('watchlist', JSON.stringify([...newWatchlist]));
-    // Sync to server
-    if (userId) {
-      fetch('/api/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          marketId: id,
-          action: newWatchlist.has(id) ? 'add' : 'remove',
-        }),
-      }).catch(console.error);
-    }
+
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.userId, marketId: id, action }),
+    });
   };
 
   const handleNotify = async (market: Market) => {
-    if (!userId) return;
+    if (!user) return;
     const action = watchlist.has(market.id) ? 'remove' : 'add';
     if (action === 'add' && !canAddToWatchlist) {
       setShowUpgradeModal(true);
       return;
     }
-    try {
-      await fetch('/api/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          marketId: market.id,
-          marketQuestion: market.question,
-          action,
-        }),
-      });
-      toggleWatchlist(market.id);
-      if (action === 'add' && !telegramConnected) {
-        setShowConnectModal(true);
-      }
-    } catch (e) {
-      console.error('Notify error:', e);
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: user.userId,
+        marketId: market.id,
+        marketQuestion: market.question,
+        action,
+      }),
+    });
+    await toggleWatchlist(market.id);
+    if (action === 'add' && !telegramConnected) {
+      setShowConnectModal(true);
     }
   };
 
-  const handleSubscribe = async (plan: Plan) => {
-    if (plan === 'free') return;
-    setCheckingOut(plan);
-    try {
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan, userId }),
-      });
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      }
-    } catch (e) {
-      console.error('Checkout error:', e);
-    } finally {
-      setCheckingOut(null);
+  const handleBuyPlan = async (plan: 'pro' | 'trader') => {
+    setShowUpgradeModal(false);
+    // Create payment and redirect
+    const res = await fetch('/api/crypto/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, chain: 'ethereum' }),
+    });
+    const data = await res.json();
+    if (data.ref) {
+      router.push(`/v1/payment?ref=${encodeURIComponent(data.ref)}&plan=${encodeURIComponent(plan)}`);
     }
   };
 
   const todayCount = markets.filter(m => { const h = getHoursUntilResolution(m.endDate); return h <= 24 && h > 0; }).length;
   const weekCount = markets.filter(m => { const h = getHoursUntilResolution(m.endDate); return h > 0 && h <= 168; }).length;
 
+  // --- Not logged in: show login prompt ---
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white">
+        <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+              📅 Resolution Calendar <span className="text-xs text-gray-600">(v1)</span>
+            </h1>
+          </div>
+        </header>
+        <main className="max-w-md mx-auto px-4 py-20 text-center">
+          <h2 className="text-2xl font-bold mb-4">Войди чтобы продолжить</h2>
+          <p className="text-gray-400 mb-8">
+            Авторизуйся чтобы сохранять watchlist и получать Telegram уведомления о резолвах.
+          </p>
+          <div className="space-y-3">
+            <a
+              href="/auth/login"
+              className="block w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-center"
+            >
+              Войти / Регистрация
+            </a>
+          </div>
+          <div className="mt-8 p-4 bg-gray-900 rounded-xl border border-gray-800">
+            <p className="text-gray-500 text-xs mb-2">Без входа:</p>
+            <p className="text-gray-400 text-sm">• Просмотр всех markets</p>
+            <p className="text-gray-400 text-sm">• Нет watchlist</p>
+            <p className="text-gray-400 text-sm">• Нет уведомлений</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Success toast */}
       {showSuccessToast && (
         <div className="fixed top-4 right-4 z-50 bg-green-900 border border-green-700 text-white px-4 py-3 rounded-lg shadow-lg text-sm">
-          ✅ Подписка активирована!
+          ✅ Платеж подтвержден! {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} активирован.
         </div>
       )}
 
@@ -233,8 +230,7 @@ function HomeContent() {
                 📅 Resolution Calendar <span className="text-xs text-gray-600">(v1)</span>
               </h1>
               <p className="text-xs text-gray-500">
-                Polymarket • {markets.length} active markets
-                {lastUpdate && ` • Updated ${lastUpdate.toLocaleTimeString()}`}
+                {markets.length} active markets{lastUpdate && ` • Updated ${lastUpdate.toLocaleTimeString()}`}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -249,9 +245,10 @@ function HomeContent() {
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
-                {isSubscribed ? PLANS[currentPlan].name : 'FREE'}
-                {!isSubscribed && ' → Upgrade'}
+                {isSubscribed ? currentPlan.toUpperCase() : 'FREE'}
+                {!isSubscribed && ' → BUY'}
               </button>
+
               <button
                 onClick={() => setShowWatchlist(!showWatchlist)}
                 className={`px-3 py-1.5 rounded text-sm ${
@@ -262,6 +259,7 @@ function HomeContent() {
               >
                 ★ Watchlist ({watchlist.size}{!isSubscribed && `/${WATCHLIST_LIMIT}`})
               </button>
+
               <a
                 href="https://t.me/ResolutionCalBot"
                 target="_blank"
@@ -270,6 +268,14 @@ function HomeContent() {
               >
                 🔔 Telegram
               </a>
+
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-400 hover:bg-gray-700"
+              >
+                {loggingOut ? '...' : '🚪'}
+              </button>
             </div>
           </div>
 
@@ -329,17 +335,17 @@ function HomeContent() {
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-white">
-                💎 Разблокируй unlimited watchlist + priority alerts
+                💎 Unlimited watchlist + priority alerts
               </p>
               <p className="text-xs text-gray-400">
-                Free: {WATCHLIST_LIMIT} markets max. Pro от $4.99/мес.
+                Free: {WATCHLIST_LIMIT} markets max. Pro $50/мес, Trader $150/мес.
               </p>
             </div>
             <button
               onClick={() => setShowUpgradeModal(true)}
               className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
             >
-              Upgrade →
+              BUY →
             </button>
           </div>
         </div>
@@ -374,15 +380,11 @@ function HomeContent() {
       <footer className="border-t border-gray-800 mt-12">
         <div className="max-w-4xl mx-auto px-4 py-6">
           <div className="text-center text-gray-600 text-sm">
-            <p>Resolution Calendar • Data from Polymarket CLOB API</p>
+            <p>Resolution Calendar • Polymarket data</p>
             <p className="mt-1">
-              <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">
-                polymarket.com
-              </a>
+              <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">polymarket.com</a>
               {' • '}
-              <a href="https://t.me/ResolutionCalBot" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">
-                Telegram Alerts
-              </a>
+              <a href="https://t.me/ResolutionCalBot" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">Telegram</a>
               {' • '}
               <a href="/" className="hover:text-gray-400">v2.0</a>
             </p>
@@ -396,16 +398,16 @@ function HomeContent() {
           <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-md w-full p-6">
             <h2 className="text-xl font-bold text-white mb-2">🔔 Подключи Telegram</h2>
             <p className="text-gray-400 text-sm mb-4">
-              Чтобы получать уведомления о резолвах, привяжи Telegram к своему профилю.
+              Чтобы получать уведомления о резолвах, привяжи Telegram к профилю.
             </p>
             <div className="bg-gray-800 rounded-lg p-3 mb-4">
-              <p className="text-gray-400 text-xs mb-1">Твой ID:</p>
-              <code className="text-green-400 text-sm break-all">{userId}</code>
+              <p className="text-gray-400 text-xs mb-1">Твой user ID:</p>
+              <code className="text-green-400 text-sm break-all">{user?.userId}</code>
             </div>
             <ol className="text-gray-300 text-sm space-y-2 mb-4">
               <li>1. Открой <a href="https://t.me/ResolutionCalBot" target="_blank" className="text-blue-400 underline">@ResolutionCalBot</a></li>
               <li>2. Напиши <code className="bg-gray-800 px-1 rounded">/start</code></li>
-              <li>3. Напиши <code className="bg-gray-800 px-1 rounded">/connect {userId}</code></li>
+              <li>3. Напиши <code className="bg-gray-800 px-1 rounded">/connect {user?.userId}</code></li>
             </ol>
             <div className="flex gap-2">
               <button
@@ -415,7 +417,7 @@ function HomeContent() {
                 Позже
               </button>
               <button
-                onClick={() => navigator.clipboard.writeText(`/connect ${userId}`)}
+                onClick={() => navigator.clipboard.writeText(`/connect ${user?.userId}`)}
                 className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
               >
                 📋 Скопировать
@@ -440,8 +442,8 @@ function HomeContent() {
             </div>
 
             <div className="grid gap-4">
-              {(['pro', 'trader'] as Plan[]).map((key) => {
-                const plan = PLANS[key];
+              {(['pro', 'trader'] as const).map((key) => {
+                const plan = CRYPTO_PLANS[key];
                 return (
                   <div
                     key={key}
@@ -452,7 +454,7 @@ function HomeContent() {
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                        <p className="text-xs text-gray-400">${(plan.price / 100).toFixed(2)}/мес</p>
+                        <p className="text-xs text-gray-400">${plan.priceUsdt}/мес (USDT)</p>
                       </div>
                       <span className={`text-xs font-medium px-2 py-0.5 rounded ${
                         key === 'trader' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
@@ -468,24 +470,28 @@ function HomeContent() {
                       ))}
                     </ul>
                     <button
-                      onClick={() => handleSubscribe(key)}
-                      disabled={checkingOut !== null}
-                      className={`w-full py-2.5 rounded-lg font-medium transition disabled:opacity-50 ${
+                      onClick={() => handleBuyPlan(key)}
+                      className={`w-full py-2.5 rounded-lg font-medium transition ${
                         key === 'trader'
                           ? 'bg-purple-600 hover:bg-purple-700 text-white'
                           : 'bg-blue-600 hover:bg-blue-700 text-white'
                       }`}
                     >
-                      {checkingOut === key ? 'Перенаправляем...' : `Оформить ${plan.name}`}
+                      Купить за ${plan.priceUsdt} USDT
                     </button>
                   </div>
                 );
               })}
             </div>
 
-            <p className="text-center text-gray-500 text-xs mt-4">
-              Test card: 4242 4242 4242 4242 • любая дата + CVC
-            </p>
+            <div className="mt-4 p-3 bg-gray-800 rounded-lg">
+              <p className="text-gray-400 text-xs mb-2">Оплата через:</p>
+              <div className="flex gap-2 flex-wrap">
+                {['Ethereum', 'Base', 'Polygon', 'Arbitrum'].map(net => (
+                  <span key={net} className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-300">{net}</span>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -579,7 +585,6 @@ function MarketList({
               soon ? 'border-red-600/50 bg-red-950/20' : 'border-gray-800'
             } hover:border-gray-700`}
           >
-            {/* Category + Time badge */}
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span
@@ -599,7 +604,6 @@ function MarketList({
               </span>
             </div>
 
-            {/* Question */}
             <a
               href={`https://polymarket.com/event/${market.slug}`}
               target="_blank"
@@ -611,7 +615,6 @@ function MarketList({
               </h3>
             </a>
 
-            {/* Prices + Volume */}
             <div className="flex items-center gap-4 mt-3">
               <div className="flex gap-2">
                 {(market.outcomes || ['Yes', 'No']).map((outcome, i) => (
@@ -628,7 +631,6 @@ function MarketList({
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
               <button
                 onClick={() => onToggleWatchlist(market.id)}
