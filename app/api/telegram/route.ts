@@ -46,11 +46,13 @@ async function handleCommand(text: string, chat_id: number, username: string) {
       userId = `tg_${chat_id}`;
     }
     const newUser: UserStore = {
+      userId: userId,
       chat_id,
       username,
       subscribed: true,
       watchlist: [],
       addedAt: new Date().toISOString(),
+      subscription: { plan: 'free', status: 'inactive' },
     };
     await setUser(userId, newUser);
     await setChatIdIndex(chat_id, userId);
@@ -148,11 +150,13 @@ async function handleCommand(text: string, chat_id: number, username: string) {
     // Link this chat_id to the site userId
     const existingStore = await getUser(siteUserId);
     const linkedUser: UserStore = {
+      userId: siteUserId,
       chat_id,
       username,
       subscribed: true,
       watchlist: existingStore?.watchlist || [],
       addedAt: existingStore?.addedAt || new Date().toISOString(),
+      subscription: existingStore?.subscription || { plan: 'free', status: 'inactive' },
     };
     await setUser(siteUserId, linkedUser);
     await setChatIdIndex(chat_id, siteUserId);
@@ -172,7 +176,10 @@ async function handleCommand(text: string, chat_id: number, username: string) {
       // Auto-create user
       userId = `tg_${chat_id}`;
       const newUser: UserStore = {
-        chat_id, username, subscribed: true, watchlist: [], addedAt: new Date().toISOString()
+        userId: userId,
+        chat_id, username, subscribed: true, watchlist: [],
+        addedAt: new Date().toISOString(),
+        subscription: { plan: 'free', status: 'inactive' },
       };
       await setUser(userId, newUser);
       await setChatIdIndex(chat_id, userId);

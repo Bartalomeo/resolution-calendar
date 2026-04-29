@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Market } from '@/lib/types';
 import {
   getActiveMarkets,
@@ -14,11 +15,15 @@ import {
   CATEGORY_COLORS,
   CATEGORY_LABELS,
 } from '@/lib/polymarket';
+import { PLANS } from '@/lib/stripe';
+import type { Subscription } from '@/lib/redis';
 
 type View = 'today' | 'week' | 'month' | 'resolved';
 type Category = 'all' | 'crypto' | 'politics' | 'sports' | 'economy' | 'tech' | 'other';
+type Plan = 'free' | 'pro' | 'trader';
 
-export default function Home() {
+function HomeContent() {
+  const searchParams = useSearchParams();
   const [markets, setMarkets] = useState<Market[]>([]);
   const [resolved, setResolved] = useState<Market[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,11 +33,14 @@ export default function Home() {
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [telegramConnected, setTelegramConnected] = useState(false);
-  const [notifyMarket, setNotifyMarket] = useState<string | null>(null);
   const [userId, setUserId] = useState<string>('');
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [checkingOut, setCheckingOut] = useState<string | null>(null);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
-  // Initialize userId (anonymous identifier for this browser)
+  // Initialize userId
   useEffect(() => {
     let uid = localStorage.getItem('rc_user_id');
     if (!uid) {
@@ -41,18 +49,42 @@ export default function Home() {
     }
     setUserId(uid);
 
-    // Check if Telegram is connected
-    checkTelegramConnection(uid);
+    // Check success/canceled from URL
+    if (searchParams.get('success') === '1') {
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 5000);
+    }
+  }, [searchParams]);
+
+  // Load user data (subscription + watchlist)
+  const loadUserData = useCallback(async (uid: string) => {
+    try {
+      const res = await fetch(`/api/user?userId=${encodeURIComponent(uid)}`);
+      const data = await res.json();
+      setSubscription(data.subscription || { plan: 'free', status: 'inactive' });
+      if (data.watchlist) {
+        setWatchlist(new Set(data.watchlist));
+      }
+      if (data.chat_id) {
+        setTelegramConnected(true);
+      }
+    } catch (e) {
+      console.error('Failed to load user:', e);
+    }
   }, []);
+
+  useEffect(() => {
+    if (userId) {
+      loadUserData(userId);
+      checkTelegramConnection(userId);
+    }
+  }, [userId, loadUserData]);
 
   const checkTelegramConnection = async (uid: string) => {
     try {
       const res = await fetch(`/api/notify?userId=${encodeURIComponent(uid)}`);
       const data = await res.json();
       setTelegramConnected(data.connected);
-      if (data.watchlist) {
-        setWatchlist(new Set(data.watchlist));
-      }
     } catch (e) {
       console.error('Failed to check connection:', e);
     }
@@ -64,13 +96,10 @@ export default function Home() {
         getActiveMarkets(200),
         getResolvedMarkets(100),
       ]);
-      
-      // Add category to each market
       const withCategory = active.map(m => ({
         ...m,
         _category: detectCategory(m),
       }));
-      
       setMarkets(withCategory);
       setResolved(resolvedData);
       setLastUpdate(new Date());
@@ -87,51 +116,64 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loadMarkets]);
 
+  const currentPlan: Plan = subscription?.plan || 'free';
+  const isSubscribed = subscription?.status === 'active';
+  const WATCHLIST_LIMIT = isSubscribed ? 999 : 5;
+  const canAddToWatchlist = watchlist.size < WATCHLIST_LIMIT || isSubscribed;
+
   const filteredMarkets = markets
     .filter(m => {
-      if (view === 'today') {
-        return getHoursUntilResolution(m.endDate) <= 24;
-      }
-      if (view === 'week') {
-        const hours = getHoursUntilResolution(m.endDate);
-        return hours > 0 && hours <= 168; // 7 days
-      }
-      if (view === 'month') {
-        return getHoursUntilResolution(m.endDate) > 0;
-      }
+      if (view === 'today') return getHoursUntilResolution(m.endDate) <= 24 && getHoursUntilResolution(m.endDate) > 0;
+      if (view === 'week') { const h = getHoursUntilResolution(m.endDate); return h > 0 && h <= 168; }
+      if (view === 'month') return getHoursUntilResolution(m.endDate) > 0;
       return false;
     })
-    .filter(m => {
-      if (category === 'all') return true;
-      return (m as any)._category === category;
-    })
-    .sort((a, b) => {
-      const timeA = new Date(a.endDate).getTime();
-      const timeB = new Date(b.endDate).getTime();
-      return timeA - timeB; // Soonest first
-    });
+    .filter(m => category === 'all' || (m as any)._category === category)
+    .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
 
   const watchlistMarkets = markets.filter(m => watchlist.has(m.id));
   const displayedMarkets = showWatchlist ? watchlistMarkets : filteredMarkets;
 
   const toggleWatchlist = (id: string) => {
+    if (!canAddToWatchlist && !watchlist.has(id)) {
+      setShowUpgradeModal(true);
+      return;
+    }
     const newWatchlist = new Set(watchlist);
     if (newWatchlist.has(id)) {
       newWatchlist.delete(id);
     } else {
+      if (newWatchlist.size >= WATCHLIST_LIMIT && !isSubscribed) {
+        setShowUpgradeModal(true);
+        return;
+      }
       newWatchlist.add(id);
     }
     setWatchlist(newWatchlist);
     localStorage.setItem('watchlist', JSON.stringify([...newWatchlist]));
+    // Sync to server
+    if (userId) {
+      fetch('/api/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          marketId: id,
+          action: newWatchlist.has(id) ? 'add' : 'remove',
+        }),
+      }).catch(console.error);
+    }
   };
 
   const handleNotify = async (market: Market) => {
     if (!userId) return;
-    
     const action = watchlist.has(market.id) ? 'remove' : 'add';
-    
+    if (action === 'add' && !canAddToWatchlist) {
+      setShowUpgradeModal(true);
+      return;
+    }
     try {
-      const res = await fetch('/api/notify', {
+      await fetch('/api/notify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -141,35 +183,47 @@ export default function Home() {
           action,
         }),
       });
-      const data = await res.json();
-      
-      if (data.success) {
-        // Toggle local watchlist state
-        const newWatchlist = new Set(watchlist);
-        if (action === 'add') {
-          newWatchlist.add(market.id);
-          if (!telegramConnected) {
-            setShowConnectModal(true);
-          }
-        } else {
-          newWatchlist.delete(market.id);
-        }
-        setWatchlist(newWatchlist);
-        localStorage.setItem('watchlist', JSON.stringify([...newWatchlist]));
+      toggleWatchlist(market.id);
+      if (action === 'add' && !telegramConnected) {
+        setShowConnectModal(true);
       }
     } catch (e) {
       console.error('Notify error:', e);
     }
   };
 
-  const todayCount = markets.filter(m => getHoursUntilResolution(m.endDate) <= 24 && getHoursUntilResolution(m.endDate) > 0).length;
-  const weekCount = markets.filter(m => {
-    const h = getHoursUntilResolution(m.endDate);
-    return h > 0 && h <= 168;
-  }).length;
+  const handleSubscribe = async (plan: Plan) => {
+    if (plan === 'free') return;
+    setCheckingOut(plan);
+    try {
+      const res = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan, userId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (e) {
+      console.error('Checkout error:', e);
+    } finally {
+      setCheckingOut(null);
+    }
+  };
+
+  const todayCount = markets.filter(m => { const h = getHoursUntilResolution(m.endDate); return h <= 24 && h > 0; }).length;
+  const weekCount = markets.filter(m => { const h = getHoursUntilResolution(m.endDate); return h > 0 && h <= 168; }).length;
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      {/* Success toast */}
+      {showSuccessToast && (
+        <div className="fixed top-4 right-4 z-50 bg-green-900 border border-green-700 text-white px-4 py-3 rounded-lg shadow-lg text-sm">
+          ✅ Подписка активирована!
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
         <div className="max-w-4xl mx-auto px-4 py-4">
@@ -184,15 +238,29 @@ export default function Home() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              {/* Plan badge */}
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className={`px-3 py-1.5 rounded text-sm font-medium ${
+                  isSubscribed
+                    ? currentPlan === 'trader'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                {isSubscribed ? PLANS[currentPlan].name : 'FREE'}
+                {!isSubscribed && ' → Upgrade'}
+              </button>
               <button
                 onClick={() => setShowWatchlist(!showWatchlist)}
                 className={`px-3 py-1.5 rounded text-sm ${
-                  showWatchlist 
-                    ? 'bg-blue-600 text-white' 
+                  showWatchlist
+                    ? 'bg-blue-600 text-white'
                     : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                 }`}
               >
-                ★ Watchlist ({watchlist.size})
+                ★ Watchlist ({watchlist.size}{!isSubscribed && `/${WATCHLIST_LIMIT}`})
               </button>
               <a
                 href="https://t.me/ResolutionCalBot"
@@ -217,9 +285,7 @@ export default function Home() {
                 key={tab.key}
                 onClick={() => setView(tab.key)}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                  view === tab.key
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-500 hover:text-gray-300'
+                  view === tab.key ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
                 }`}
               >
                 <span className={view === tab.key ? tab.color : ''}>{tab.label}</span>
@@ -257,6 +323,28 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Free tier banner */}
+      {!isSubscribed && (
+        <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border-b border-blue-800/50">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-white">
+                💎 Разблокируй unlimited watchlist + priority alerts
+              </p>
+              <p className="text-xs text-gray-400">
+                Free: {WATCHLIST_LIMIT} markets max. Pro от $4.99/мес.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowUpgradeModal(true)}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
+            >
+              Upgrade →
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main content */}
       <main className="max-w-4xl mx-auto px-4 py-6">
         {loading ? (
@@ -275,6 +363,9 @@ export default function Home() {
             onToggleWatchlist={toggleWatchlist}
             onNotify={handleNotify}
             telegramConnected={telegramConnected}
+            canAddToWatchlist={canAddToWatchlist}
+            isSubscribed={isSubscribed}
+            watchlistLimit={WATCHLIST_LIMIT}
           />
         )}
       </main>
@@ -324,14 +415,77 @@ export default function Home() {
                 Позже
               </button>
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(`/connect ${userId}`);
-                }}
+                onClick={() => navigator.clipboard.writeText(`/connect ${userId}`)}
                 className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
               >
                 📋 Скопировать
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Выбери план</h2>
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="text-gray-500 hover:text-white text-xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              {(['pro', 'trader'] as Plan[]).map((key) => {
+                const plan = PLANS[key];
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-xl border ${
+                      key === 'trader' ? 'border-purple-500 bg-purple-950/30' : 'border-blue-500 bg-blue-950/30'
+                    } p-5`}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                        <p className="text-xs text-gray-400">${(plan.price / 100).toFixed(2)}/мес</p>
+                      </div>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                        key === 'trader' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
+                      }`}>
+                        {key === 'trader' ? 'MAX' : 'POPULAR'}
+                      </span>
+                    </div>
+                    <ul className="space-y-1 mb-4">
+                      {plan.features.map((f, i) => (
+                        <li key={i} className="text-sm text-gray-300 flex items-center gap-2">
+                          <span className="text-green-400 text-xs">✓</span> {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => handleSubscribe(key)}
+                      disabled={checkingOut !== null}
+                      className={`w-full py-2.5 rounded-lg font-medium transition disabled:opacity-50 ${
+                        key === 'trader'
+                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      }`}
+                    >
+                      {checkingOut === key ? 'Перенаправляем...' : `Оформить ${plan.name}`}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p className="text-center text-gray-500 text-xs mt-4">
+              Test card: 4242 4242 4242 4242 • любая дата + CVC
+            </p>
           </div>
         </div>
       )}
@@ -341,22 +495,15 @@ export default function Home() {
 
 function ResolvedSection({ markets }: { markets: Market[] }) {
   const recent = markets.slice(0, 50);
-  
   if (recent.length === 0) {
-    return (
-      <div className="text-center py-12 text-gray-500">
-        No resolved markets yet
-      </div>
-    );
+    return <div className="text-center py-12 text-gray-500">No resolved markets yet</div>;
   }
-
   return (
     <div className="space-y-3">
       <h2 className="text-lg font-semibold text-gray-300 mb-4">Recently Resolved</h2>
       {recent.map(market => {
         const prices = market.outcomePrices || [];
         const winner = prices.indexOf('1');
-
         return (
           <div key={market.id} className="bg-gray-900 rounded-lg p-4 border border-gray-800">
             <div className="flex items-start justify-between">
@@ -372,18 +519,14 @@ function ResolvedSection({ markets }: { markets: Market[] }) {
                     <span
                       key={i}
                       className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        winner === i
-                          ? 'bg-green-600 text-white'
-                          : 'bg-gray-800 text-gray-500'
+                        winner === i ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-500'
                       }`}
                     >
                       {outcome} {winner === i ? '✓' : ''}
                     </span>
                   ))}
                 </div>
-                <p className="text-gray-600 text-xs mt-1">
-                  Vol: {formatVolume(market.volume || 0)}
-                </p>
+                <p className="text-gray-600 text-xs mt-1">Vol: {formatVolume(market.volume || 0)}</p>
               </div>
             </div>
           </div>
@@ -399,19 +542,23 @@ function MarketList({
   onToggleWatchlist,
   onNotify,
   telegramConnected,
+  canAddToWatchlist,
+  isSubscribed,
+  watchlistLimit,
 }: {
   markets: Market[];
   watchlist: Set<string>;
   onToggleWatchlist: (id: string) => void;
   onNotify: (market: Market) => void;
   telegramConnected: boolean;
+  canAddToWatchlist: boolean;
+  isSubscribed: boolean;
+  watchlistLimit: number;
 }) {
   if (markets.length === 0) {
     return (
       <div className="text-center py-12 text-gray-500">
-        {watchlist.size === 0 
-          ? 'No markets in this view' 
-          : 'No markets in your watchlist match this filter'}
+        {watchlist.size === 0 ? 'No markets in this view' : 'No markets in your watchlist match this filter'}
       </div>
     );
   }
@@ -424,7 +571,6 @@ function MarketList({
         const category = (market as any)._category || 'other';
         const catColor = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
         const prices = market.outcomePrices || ['0.5', '0.5'];
-        const primaryPrice = parseFloat(prices[0] || '0.5');
 
         return (
           <div
@@ -471,9 +617,7 @@ function MarketList({
                 {(market.outcomes || ['Yes', 'No']).map((outcome, i) => (
                   <div key={i} className="flex items-center gap-1">
                     <span className="text-gray-400 text-sm">{outcome}:</span>
-                    <span className={`font-medium ${
-                      parseFloat(prices[i] || '0') > 0.5 ? 'text-green-400' : 'text-gray-300'
-                    }`}>
+                    <span className={`font-medium ${parseFloat(prices[i] || '0') > 0.5 ? 'text-green-400' : 'text-gray-300'}`}>
                       {formatPrice(prices[i] || '0.5')}
                     </span>
                   </div>
@@ -494,13 +638,13 @@ function MarketList({
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 }`}
               >
-                {watchlist.has(market.id) ? '★ In Watchlist' : '☆ Add to Watchlist'}
+                {watchlist.has(market.id) ? '★ In Watchlist' : `☆ Watchlist${!isSubscribed ? ` (${watchlist.size}/${watchlistLimit})` : ''}`}
               </button>
               <button
                 onClick={() => onNotify(market)}
                 className="px-3 py-1.5 rounded text-xs font-medium bg-blue-900/50 text-blue-400 hover:bg-blue-900 transition"
               >
-                🔔 Notify
+                🔔 Alert
               </button>
               <a
                 href={`https://polymarket.com/event/${market.slug}`}
@@ -515,5 +659,17 @@ function MarketList({
         );
       })}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }

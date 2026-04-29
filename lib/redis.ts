@@ -6,12 +6,21 @@ const redis = new Redis({
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
+export interface Subscription {
+  plan: 'free' | 'pro' | 'trader';
+  status: 'active' | 'inactive' | 'canceled';
+  stripeSessionId?: string;
+  currentPeriodEnd?: string;
+}
+
 export interface UserStore {
-  chat_id: number;
-  username: string;
+  userId: string;
+  chat_id?: number;
+  username?: string;
   subscribed: boolean;
   watchlist: string[];
   addedAt: string;
+  subscription: Subscription;
 }
 
 // KEYS
