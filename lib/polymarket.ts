@@ -29,10 +29,18 @@ export async function getActiveMarkets(limit = 200): Promise<Market[]> {
     
     const data: Market[] = await resp.json();
     
-    // Filter to only truly active markets
-    const active = data.filter(m => 
-      m && !m.closed && m.active && m.acceptingOrders !== false
-    );
+    // Parse string fields that come as JSON strings from API
+    const active = data
+      .filter(m =>
+        m && !m.closed && m.active && m.acceptingOrders !== false
+      )
+      .map(m => ({
+        ...m,
+        outcomes: typeof m.outcomes === 'string' ? JSON.parse(m.outcomes) : (m.outcomes || ['Yes', 'No']),
+        outcomePrices: typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : (m.outcomePrices || ['0.5', '0.5']),
+        volume: typeof m.volume === 'string' ? parseFloat(m.volume) : (m.volume ?? 0),
+        liquidity: typeof m.liquidity === 'string' ? parseFloat(m.liquidity) : (m.liquidity ?? 0),
+      }));
     
     cache = { data: active, timestamp: now };
     return active;
@@ -53,7 +61,15 @@ export async function getResolvedMarkets(limit = 100): Promise<Market[]> {
     if (!resp.ok) throw new Error(`API error: ${resp.status}`);
     
     const data: Market[] = await resp.json();
-    return data.filter(m => m && m.closed);
+    const resolved = data
+      .filter(m => m && m.closed)
+      .map(m => ({
+        ...m,
+        outcomes: typeof m.outcomes === 'string' ? JSON.parse(m.outcomes) : (m.outcomes || ['Yes', 'No']),
+        outcomePrices: typeof m.outcomePrices === 'string' ? JSON.parse(m.outcomePrices) : (m.outcomePrices || ['0.5', '0.5']),
+        volume: typeof m.volume === 'string' ? parseFloat(m.volume) : (m.volume ?? 0),
+      }));
+    return resolved;
   } catch (e) {
     console.error('Failed to fetch resolved markets:', e);
     return [];
@@ -76,10 +92,12 @@ export async function getMarketBySlug(slug: string): Promise<Market | null> {
   }
 }
 
-export function formatVolume(vol: number): string {
-  if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(1)}M`;
-  if (vol >= 1_000) return `$${(vol / 1_000).toFixed(0)}K`;
-  return `$${vol.toFixed(0)}`;
+export function formatVolume(vol: number | string | undefined): string {
+  const n = typeof vol === 'string' ? parseFloat(vol) : (vol ?? 0);
+  if (isNaN(n)) return '$0';
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
 }
 
 export function formatPrice(priceStr: string | number): string {
