@@ -55,6 +55,15 @@ export async function deleteChatIdIndex(chatId: number): Promise<void> {
   await redis.del(chatIdIndex(chatId));
 }
 
+// --- Pro Users Set ---
+export async function addProUser(chatId: number): Promise<void> {
+  await redis.sadd('pro_users', String(chatId));
+}
+
+export async function removeProUser(chatId: number): Promise<void> {
+  await redis.srem('pro_users', String(chatId));
+}
+
 export async function getAllUserIds(): Promise<string[]> {
   const keys = await redis.keys('rc:user:*');
   return keys.map(k => k.replace('rc:user:', ''));

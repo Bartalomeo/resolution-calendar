@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllUserIds, getUser, setUser } from '@/lib/redis';
+import { getAllUserIds, getUser, setUser, removeProUser } from '@/lib/redis';
 
 const MAINTENANCE_SECRET = process.env.MAINTENANCE_SECRET || 'rc-maintenance-secret';
 
@@ -26,6 +26,9 @@ export async function POST(req: NextRequest) {
             status: 'inactive',
           };
           await setUser(userId, user);
+          if (user.chat_id) {
+            await removeProUser(user.chat_id);
+          }
           expired++;
         }
       }

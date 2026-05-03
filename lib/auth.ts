@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { getUser, setUser } from '@/lib/redis';
+import { getUser, setUser, removeProUser } from '@/lib/redis';
 import type { UserStore } from '@/lib/redis';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'rc-secret-change-me-in-vercel';
@@ -53,6 +53,9 @@ export function getSessionFromRequest(request: Request): Promise<{ user: UserSto
           status: 'inactive',
         };
         await setUser(payload.userId, user);
+        if (user.chat_id) {
+          await removeProUser(user.chat_id);
+        }
       }
     }
 

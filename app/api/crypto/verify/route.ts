@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSessionFromRequest } from '@/lib/auth';
-import { getPayment, updatePaymentStatus, getUser, setUser } from '@/lib/redis';
+import { getPayment, updatePaymentStatus, getUser, setUser, addProUser } from '@/lib/redis';
 import { verifyUsdtTx, PLANS } from '@/lib/crypto';
 
 export async function GET(req: NextRequest) {
@@ -64,6 +64,10 @@ export async function GET(req: NextRequest) {
           currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         };
         await setUser(session.user.userId, user);
+        // Add to Pro users set if has Telegram
+        if (payment.plan === 'pro' && user.chat_id) {
+          await addProUser(user.chat_id);
+        }
       }
 
       return NextResponse.json({
