@@ -171,6 +171,7 @@ function HomeContent() {
     const data = await res.json();
     if (data.ref) {
       localStorage.setItem('rc_payment_expires', data.expiresAt);
+      localStorage.setItem('rc_payment_created', Date.now().toString());
       router.push(`/v1/payment?ref=${encodeURIComponent(data.ref)}&plan=${encodeURIComponent(plan)}`);
     }
   };

@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 const MERCHANT_WALLET = '0x341bACc53cc14EecF2cE5bd294826eB0740b100F';
-const PLAN_PRICE = 4.99; // USDT
+const PLAN_PRICE = 4.99;
 const PLAN_NAME = 'Pro';
+const PAYMENT_DURATION_SECONDS = 30 * 60; // 30 minutes
 
 function PaymentContent() {
   const searchParams = useSearchParams();
@@ -14,15 +15,14 @@ function PaymentContent() {
   const [step, setStep] = useState<'loading' | 'pay' | 'verifying' | 'done' | 'error'>('loading');
   const [ref, setRef] = useState('');
   const [plan, setPlan] = useState('');
-  const [paymentData, setPaymentData] = useState<any>(null);
   const [txHash, setTxHash] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
-  const [countdown, setCountdown] = useState<number>(0);
+  const [countdown, setCountdown] = useState<number>(PAYMENT_DURATION_SECONDS);
   const [txError, setTxError] = useState('');
   const [qrLoaded, setQrLoaded] = useState(false);
 
-  // QR code element ref
+  // QR code canvas ref
   let qrCanvasRef: HTMLCanvasElement | null = null;
   const setQrRef = (el: HTMLCanvasElement | null) => { qrCanvasRef = el; };
 
@@ -39,7 +39,35 @@ function PaymentContent() {
 
     setRef(refParam);
     setPlan(planParam);
-    setStep('pay');
+
+    // Check payment status from API (no auth needed to check by ref)
+    fetch(`/api/crypto/status?ref=${encodeURIComponent(refParam)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'confirmed') {
+          setStep('done');
+        } else if (data.status === 'expired') {
+          setStep('error');
+          setError('Payment expired. Please create a new one.');
+        } else {
+          setStep('pay');
+          // Start 30 min countdown from now
+          const created = localStorage.getItem('rc_payment_created');
+          const createdMs = created ? parseInt(created, 10) : Date.now();
+          const elapsed = Math.floor((Date.now() - createdMs) / 1000);
+          const remaining = Math.max(0, PAYMENT_DURATION_SECONDS - elapsed);
+          setCountdown(remaining);
+          if (remaining === 0) {
+            setStep('error');
+            setError('Payment expired. Please create a new one.');
+          }
+        }
+      })
+      .catch(() => {
+        // Network error — show payment form anyway
+        setStep('pay');
+        setCountdown(PAYMENT_DURATION_SECONDS);
+      });
 
     // Load QR code library
     if (typeof window !== 'undefined' && !(window as any).QRCode) {
@@ -51,22 +79,10 @@ function PaymentContent() {
       setQrLoaded(true);
     }
 
-    // Check existing countdown
-    const expires = localStorage.getItem('rc_payment_expires');
-    if (expires) {
-      const left = Math.max(0, Math.floor((new Date(expires).getTime() - Date.now()) / 1000));
-      if (left === 0) {
-        setStep('error');
-        setError('Payment link expired');
-        return;
-      }
-      setCountdown(left);
-    }
-
     // If txHash in URL — verify immediately
     if (txParam) {
       setTxHash(txParam);
-      handleVerify(txParam);
+      // Will verify after step is set to 'pay'
     }
   }, [searchParams]);
 
@@ -77,46 +93,38 @@ function PaymentContent() {
       setCountdown(prev => {
         if (prev <= 1) {
           setStep('error');
-          setError('Payment link expired');
+          setError('Payment expired. Please create a new one.');
           return 0;
-        }
-        // Persist
-        const expires = localStorage.getItem('rc_payment_expires');
-        if (expires) {
-          const newLeft = Math.floor((new Date(expires).getTime() - Date.now()) / 1000);
-          if (newLeft <= 0) {
-            setStep('error');
-            setError('Payment link expired');
-            return 0;
-          }
-          return newLeft;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [step]);
+  }, [step, countdown]);
 
-  // Render QR when data ready and library loaded
+  // Verify txHash if passed in URL
   useEffect(() => {
-    if (!qrLoaded || step !== 'pay' || !qrCanvasRef || !MERCHANT_WALLET) return;
-    const canvas = qrCanvasRef;
+    const txParam = searchParams.get('txHash');
+    if (step === 'pay' && txParam && !verifying) {
+      setTxHash(txParam);
+    }
+  }, [step, verifying, searchParams]);
+
+  // Render QR
+  useEffect(() => {
+    if (!qrLoaded || step !== 'pay' || !qrCanvasRef) return;
     const QRCode = (window as any).QRCode;
     if (!QRCode) return;
-
-    QRCode.toCanvas(canvas, MERCHANT_WALLET, {
+    QRCode.toCanvas(qrCanvasRef, MERCHANT_WALLET, {
       width: 160,
       margin: 2,
       color: { dark: '#22c55e', light: '#1f2937' },
     });
   }, [qrLoaded, step]);
 
-  const handleVerify = useCallback(async (hash?: string) => {
+  const handleVerify = async (hash?: string) => {
     const targetHash = hash || txHash.trim();
-    if (!targetHash) {
-      setTxError('Enter tx hash');
-      return;
-    }
+    if (!targetHash) { setTxError('Enter tx hash'); return; }
     if (!targetHash.startsWith('0x') || targetHash.length < 66) {
       setTxError('Invalid tx hash format');
       return;
@@ -134,7 +142,7 @@ function PaymentContent() {
         setStep('done');
       } else if (data.status === 'expired') {
         setStep('error');
-        setError('Payment expired');
+        setError('Payment expired. Please create a new one.');
       } else {
         setTxError(data.error || 'Transaction not found or not confirmed yet');
         setStep('pay');
@@ -145,7 +153,7 @@ function PaymentContent() {
     } finally {
       setVerifying(false);
     }
-  }, [ref, txHash]);
+  };
 
   const minutes = Math.floor(countdown / 60);
   const seconds = countdown % 60;
@@ -167,7 +175,7 @@ function PaymentContent() {
         <div className="text-center max-w-sm">
           <div className="text-6xl mb-4">❌</div>
           <h1 className="text-xl font-bold mb-2">Payment failed</h1>
-          <p className="text-gray-400 mb-6">{error || 'Something went wrong'}</p>
+          <p className="text-gray-400 mb-6">{error}</p>
           <button onClick={() => router.push('/v1')} className="px-6 py-3 bg-blue-600 rounded-lg font-medium">
             Back to Calendar
           </button>
@@ -182,9 +190,7 @@ function PaymentContent() {
         <div className="text-center max-w-sm">
           <div className="text-6xl mb-4">✅</div>
           <h1 className="text-2xl font-bold mb-2">Payment confirmed!</h1>
-          <p className="text-gray-400 mb-2">
-            Plan <strong>{PLAN_NAME}</strong> activated.
-          </p>
+          <p className="text-gray-400 mb-2">Plan <strong>{PLAN_NAME}</strong> activated.</p>
           <p className="text-gray-500 text-sm mb-6">Valid for 30 days</p>
           <button onClick={() => router.push('/v1')} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium">
             Open Resolution Calendar
@@ -200,9 +206,7 @@ function PaymentContent() {
         <div className="text-center max-w-sm">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <h1 className="text-xl font-bold mb-2">Verifying transaction...</h1>
-          <p className="text-gray-400 text-sm mb-4">
-            Fetching from Ethereum blockchain
-          </p>
+          <p className="text-gray-400 text-sm mb-4">Fetching from Ethereum blockchain</p>
           <code className="text-green-400 text-xs break-all">{txHash}</code>
         </div>
       </div>
@@ -216,7 +220,6 @@ function PaymentContent() {
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center gap-3">
           <button onClick={() => router.push('/v1')} className="text-gray-500 hover:text-white text-xl">←</button>
           <h1 className="text-xl font-bold">Pay for {PLAN_NAME}</h1>
-          <div className="text-xs text-gray-600 w-8" />
         </div>
       </header>
 
@@ -233,9 +236,7 @@ function PaymentContent() {
         {/* Amount */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 text-center">
           <p className="text-gray-400 text-sm mb-1">Amount</p>
-          <p className="text-3xl font-bold">
-            {PLAN_PRICE} <span className="text-lg text-gray-400">USDT</span>
-          </p>
+          <p className="text-3xl font-bold">{PLAN_PRICE} <span className="text-lg text-gray-400">USDT</span></p>
           <p className="text-gray-500 text-xs mt-1">Ethereum (ERC-20)</p>
         </div>
 
@@ -245,9 +246,7 @@ function PaymentContent() {
           <div className="w-40 h-40 mx-auto mb-3 bg-gray-800 rounded-lg overflow-hidden">
             <canvas ref={setQrRef} />
           </div>
-          <p className="text-gray-500 text-xs">
-            Send {PLAN_PRICE} USDT to the address below
-          </p>
+          <p className="text-gray-500 text-xs">Send {PLAN_PRICE} USDT to the address below</p>
         </div>
 
         {/* Address */}
@@ -262,11 +261,9 @@ function PaymentContent() {
           </button>
         </div>
 
-        {/* TX Hash input */}
+        {/* TX Hash */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5">
-          <p className="text-gray-400 text-sm mb-2">
-            After sending — paste tx hash:
-          </p>
+          <p className="text-gray-400 text-sm mb-2">After sending — paste tx hash:</p>
           <textarea
             value={txHash}
             onChange={e => setTxHash(e.target.value)}
@@ -274,9 +271,7 @@ function PaymentContent() {
             className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm font-mono resize-none focus:outline-none focus:border-blue-500"
             rows={3}
           />
-          {txError && (
-            <p className="text-red-400 text-xs mt-2">{txError}</p>
-          )}
+          {txError && <p className="text-red-400 text-xs mt-2">{txError}</p>}
           <button
             onClick={() => handleVerify()}
             disabled={verifying || !txHash.trim()}
@@ -284,9 +279,7 @@ function PaymentContent() {
           >
             {verifying ? 'Verifying...' : '✅ Verify Payment'}
           </button>
-          <p className="text-gray-600 text-xs mt-3 text-center">
-            Confirmation: 1-3 minutes on Ethereum
-          </p>
+          <p className="text-gray-600 text-xs mt-3 text-center">Confirmation: 1-3 minutes on Ethereum</p>
         </div>
 
       </main>
