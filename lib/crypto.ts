@@ -42,11 +42,6 @@ export const PLANS = {
     priceUsdt: 4.99, // $4.99/month
     features: ['Unlimited watchlist', 'Priority Telegram alerts', '48h resolution alerts', 'Daily email digest'],
   },
-  trader: {
-    name: 'Trader',
-    priceUsdt: 9.99, // $9.99/month
-    features: ['Everything in Pro', '72h resolution alerts', 'Copy-trading signals', 'Priority support'],
-  },
 } as const;
 
 export type PlanKey = keyof typeof PLANS;

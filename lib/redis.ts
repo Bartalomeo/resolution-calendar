@@ -8,9 +8,9 @@ const redis = new Redis({
 export { redis };
 
 export interface Subscription {
-  plan: 'free' | 'pro' | 'trader';
+  plan: 'free' | 'pro';
   status: 'active' | 'inactive' | 'canceled';
-  stripeSessionId?: string;
+  stripeSessionId?: string; // deprecated
   currentPeriodEnd?: string;
 }
 
@@ -83,7 +83,7 @@ export async function removeFromWatchlist(userId: string, marketId: string): Pro
 export interface PaymentStore {
   ref: string;
   userId: string;
-  plan: 'free' | 'pro' | 'trader';
+  plan: 'free' | 'pro';
   chain: string;
   address: string;
   amount: string;

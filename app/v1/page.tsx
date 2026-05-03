@@ -160,7 +160,7 @@ function HomeContent() {
     }
   };
 
-  const handleBuyPlan = async (plan: 'pro' | 'trader') => {
+  const handleBuyPlan = async (plan: 'pro') => {
     setShowUpgradeModal(false);
     // Create payment and redirect
     const res = await fetch('/api/crypto/create', {
@@ -440,24 +440,20 @@ function HomeContent() {
             </div>
 
             <div className="grid gap-4">
-              {(['pro', 'trader'] as const).map((key) => {
+              {(['pro'] as const).map((key) => {
                 const plan = CRYPTO_PLANS[key];
                 return (
                   <div
                     key={key}
-                    className={`rounded-xl border ${
-                      key === 'trader' ? 'border-purple-500 bg-purple-950/30' : 'border-blue-500 bg-blue-950/30'
-                    } p-5`}
+                    className="rounded-xl border border-blue-500 bg-blue-950/30 p-5"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="text-lg font-bold text-white">{plan.name}</h3>
                         <p className="text-xs text-gray-400">${plan.priceUsdt}/mo (USDT)</p>
                       </div>
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded ${
-                        key === 'trader' ? 'bg-purple-600 text-white' : 'bg-blue-600 text-white'
-                      }`}>
-                        {key === 'trader' ? 'MAX' : 'POPULAR'}
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-600 text-white">
+                        PRO
                       </span>
                     </div>
                     <ul className="space-y-1 mb-4">
@@ -469,11 +465,7 @@ function HomeContent() {
                     </ul>
                     <button
                       onClick={() => handleBuyPlan(key)}
-                      className={`w-full py-2.5 rounded-lg font-medium transition ${
-                        key === 'trader'
-                          ? 'bg-purple-600 hover:bg-purple-700 text-white'
-                          : 'bg-blue-600 hover:bg-blue-700 text-white'
-                      }`}
+                      className="w-full py-2.5 rounded-lg font-medium transition bg-blue-600 hover:bg-blue-700 text-white"
                     >
                       Buy for ${plan.priceUsdt} USDT
                     </button>
