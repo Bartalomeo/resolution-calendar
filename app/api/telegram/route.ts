@@ -3,7 +3,7 @@ import * as crypto from 'crypto';
 import {
   getUser, setUser, deleteUser, setChatIdIndex, deleteChatIdIndex,
   addToWatchlist, removeFromWatchlist, getAllUserIds, getUserIdByChatId,
-  UserStore
+  addProUser, removeProUser, UserStore
 } from '@/lib/redis';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
@@ -56,6 +56,10 @@ async function handleCommand(text: string, chat_id: number, username: string) {
     };
     await setUser(userId, newUser);
     await setChatIdIndex(chat_id, userId);
+    // If user is already Pro, add to pro_users Set
+    if (newUser.subscription.plan === 'pro' && newUser.subscription.status === 'active') {
+      await addProUser(chat_id);
+    }
     await sendMessage(chat_id,
       `📅 <b>Resolution Calendar Bot</b>\n\n` +
       `Я буду присылать уведомления когда рынки в твоём watchlist близятся к resolution.\n\n` +
@@ -160,6 +164,10 @@ async function handleCommand(text: string, chat_id: number, username: string) {
     };
     await setUser(siteUserId, linkedUser);
     await setChatIdIndex(chat_id, siteUserId);
+    // If user is Pro, add to pro_users Set
+    if (linkedUser.subscription.plan === 'pro' && linkedUser.subscription.status === 'active') {
+      await addProUser(chat_id);
+    }
     await sendMessage(chat_id,
       `✅ <b>Telegram подключен!</b>\n\n` +
       `Теперь все рынки которые ты добавишь на сайте будут отображаться в /watchlist.\n\n` +
