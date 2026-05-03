@@ -82,8 +82,13 @@ export async function GET(req: Request) {
         const end = new Date(endDate);
         const diff = end.getTime() - now.getTime();
 
-        // Notify if resolving within 1 hour
-        if (diff > 0 && diff <= 3600000) {
+        // Notify if resolving TODAY (the day of resolution)
+        const today = new Date();
+        const endDateStr = endDate.slice(0, 10);
+        const todayStr = today.toISOString().slice(0, 10);
+        const isToday = endDateStr === todayStr;
+
+        if (isToday) {
           try {
             const msg = formatMarketAlert(market);
             await sendMessage(chatId, msg);
