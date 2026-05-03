@@ -38,6 +38,7 @@ function HomeContent() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [selectedChain, setSelectedChain] = useState<string>('ethereum');
 
   // Load session on mount
   const loadSession = useCallback(async () => {
@@ -166,13 +167,13 @@ function HomeContent() {
     const res = await fetch('/api/crypto/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan, chain: 'ethereum' }),
+      body: JSON.stringify({ plan, chain: selectedChain }),
     });
     const data = await res.json();
     if (data.ref) {
       localStorage.setItem('rc_payment_expires', data.expiresAt);
       localStorage.setItem('rc_payment_created', Date.now().toString());
-      router.push(`/v1/payment?ref=${encodeURIComponent(data.ref)}&plan=${encodeURIComponent(plan)}`);
+      router.push(`/v1/payment?ref=${encodeURIComponent(data.ref)}&plan=${encodeURIComponent(plan)}&chain=${encodeURIComponent(selectedChain)}`);
     }
   };
 
@@ -336,7 +337,7 @@ function HomeContent() {
                 💎 Unlimited watchlist + priority alerts
               </p>
               <p className="text-xs text-gray-400">
-                Free: {WATCHLIST_LIMIT} markets max. Pro $4.99/mo, Trader $9.99/mo.
+                Free: {WATCHLIST_LIMIT} markets max. Pro $4.99/mo.
               </p>
             </div>
             <button
@@ -475,10 +476,26 @@ function HomeContent() {
             </div>
 
             <div className="mt-4 p-3 bg-gray-800 rounded-lg">
-              <p className="text-gray-400 text-xs mb-2">Pay with:</p>
-              <div className="flex gap-2 flex-wrap">
-                {['Ethereum', 'Base', 'Polygon', 'Arbitrum'].map(net => (
-                  <span key={net} className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-300">{net}</span>
+              <p className="text-gray-400 text-xs mb-2">Select network:</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'ethereum', label: 'Ethereum', icon: 'Ξ' },
+                  { key: 'base', label: 'Base', icon: '◎' },
+                  { key: 'polygon', label: 'Polygon', icon: '⬡' },
+                  { key: 'arbitrum', label: 'Arbitrum', icon: '◆' },
+                ].map(net => (
+                  <button
+                    key={net.key}
+                    onClick={() => setSelectedChain(net.key)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                      selectedChain === net.key
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <span>{net.icon}</span>
+                    <span>{net.label}</span>
+                  </button>
                 ))}
               </div>
             </div>

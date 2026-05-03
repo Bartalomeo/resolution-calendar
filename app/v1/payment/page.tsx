@@ -8,6 +8,13 @@ const PLAN_PRICE = 4.99;
 const PLAN_NAME = 'Pro';
 const PAYMENT_DURATION_SECONDS = 30 * 60; // 30 minutes
 
+const CHAINS: Record<string, { name: string; icon: string; currency: string }> = {
+  ethereum: { name: 'Ethereum', icon: 'Ξ', currency: 'USDT (ERC-20)' },
+  base: { name: 'Base', icon: '◎', currency: 'USDT (Base)' },
+  polygon: { name: 'Polygon', icon: '⬡', currency: 'USDT (Polygon)' },
+  arbitrum: { name: 'Arbitrum', icon: '◆', currency: 'USDT (Arbitrum)' },
+};
+
 function PaymentContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -15,6 +22,7 @@ function PaymentContent() {
   const [step, setStep] = useState<'loading' | 'pay' | 'verifying' | 'done' | 'error'>('loading');
   const [ref, setRef] = useState('');
   const [plan, setPlan] = useState('');
+  const [chain, setChain] = useState('ethereum');
   const [txHash, setTxHash] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [error, setError] = useState('');
@@ -28,6 +36,7 @@ function PaymentContent() {
   useEffect(() => {
     const refParam = searchParams.get('ref');
     const planParam = searchParams.get('plan');
+    const chainParam = searchParams.get('chain');
     const txParam = searchParams.get('txHash');
 
     if (!refParam || !planParam) {
@@ -38,6 +47,9 @@ function PaymentContent() {
 
     setRef(refParam);
     setPlan(planParam);
+    if (chainParam && CHAINS[chainParam]) {
+      setChain(chainParam);
+    }
 
     // Check payment status from API (no auth needed to check by ref)
     fetch(`/api/crypto/status?ref=${encodeURIComponent(refParam)}`)
@@ -81,7 +93,6 @@ function PaymentContent() {
     // If txHash in URL — verify immediately
     if (txParam) {
       setTxHash(txParam);
-      // Will verify after step is set to 'pay'
     }
   }, [searchParams]);
 
@@ -116,6 +127,8 @@ function PaymentContent() {
     if (!QRCode) return;
     // Clear previous QR if any
     qrContainerRef.current.innerHTML = '';
+    // Build a payment URI: e.g.ethereum:0x...?value=... or just the address
+    // For wallets: we embed the address as a plain address (works on all chains)
     new QRCode(qrContainerRef.current, {
       text: MERCHANT_WALLET,
       width: 160,
@@ -161,6 +174,7 @@ function PaymentContent() {
 
   const minutes = Math.floor(countdown / 60);
   const seconds = countdown % 60;
+  const chainInfo = CHAINS[chain] || CHAINS.ethereum;
 
   if (step === 'loading') {
     return (
@@ -210,7 +224,7 @@ function PaymentContent() {
         <div className="text-center max-w-sm">
           <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <h1 className="text-xl font-bold mb-2">Verifying transaction...</h1>
-          <p className="text-gray-400 text-sm mb-4">Fetching from Ethereum blockchain</p>
+          <p className="text-gray-400 text-sm mb-2">Checking {chainInfo.name} blockchain</p>
           <code className="text-green-400 text-xs break-all">{txHash}</code>
         </div>
       </div>
@@ -237,20 +251,39 @@ function PaymentContent() {
           </p>
         </div>
 
+        {/* Chain badge */}
+        <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">{chainInfo.icon}</span>
+              <div>
+                <p className="text-white text-sm font-medium">{chainInfo.name}</p>
+                <p className="text-gray-500 text-xs">{chainInfo.currency}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => router.push('/v1')}
+              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-gray-400"
+            >
+              Change
+            </button>
+          </div>
+        </div>
+
         {/* Amount */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 text-center">
           <p className="text-gray-400 text-sm mb-1">Amount</p>
           <p className="text-3xl font-bold">{PLAN_PRICE} <span className="text-lg text-gray-400">USDT</span></p>
-          <p className="text-gray-500 text-xs mt-1">Ethereum (ERC-20)</p>
+          <p className="text-gray-500 text-xs mt-1">{chainInfo.currency}</p>
         </div>
 
         {/* QR Code */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 text-center">
-          <p className="text-gray-400 text-sm mb-3">Scan with your wallet</p>
+          <p className="text-gray-400 text-sm mb-3">Scan with your {chainInfo.name} wallet</p>
           <div className="w-40 h-40 mx-auto mb-3 bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center">
             <div ref={qrContainerRef} />
           </div>
-          <p className="text-gray-500 text-xs">Send {PLAN_PRICE} USDT to the address below</p>
+          <p className="text-gray-500 text-xs">Send {PLAN_PRICE} USDT on <strong>{chainInfo.name}</strong> to the address below</p>
         </div>
 
         {/* Address */}
@@ -283,7 +316,9 @@ function PaymentContent() {
           >
             {verifying ? 'Verifying...' : '✅ Verify Payment'}
           </button>
-          <p className="text-gray-600 text-xs mt-3 text-center">Confirmation: 1-3 minutes on Ethereum</p>
+          <p className="text-gray-600 text-xs mt-3 text-center">
+            Confirmation: 1-3 min on {chainInfo.name}
+          </p>
         </div>
 
       </main>

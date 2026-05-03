@@ -17,16 +17,16 @@ export async function GET(req: NextRequest) {
 
     // Already confirmed
     if (payment.status === 'confirmed') {
-      return NextResponse.json({ status: 'confirmed' });
+      return NextResponse.json({ status: 'confirmed', chain: payment.chain });
     }
 
     // Expired (either marked expired or past expiration time)
     if (payment.status === 'expired' || new Date(payment.expiresAt) < new Date()) {
-      return NextResponse.json({ status: 'expired' });
+      return NextResponse.json({ status: 'expired', chain: payment.chain });
     }
 
     // Still pending
-    return NextResponse.json({ status: 'pending' });
+    return NextResponse.json({ status: 'pending', chain: payment.chain });
   } catch (err: any) {
     console.error('Crypto status error:', err);
     return NextResponse.json({ error: err.message }, { status: 500 });
