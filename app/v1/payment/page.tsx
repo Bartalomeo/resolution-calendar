@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 const MERCHANT_WALLET = '0x341bACc53cc14EecF2cE5bd294826eB0740b100F';
@@ -23,8 +23,7 @@ function PaymentContent() {
   const [qrLoaded, setQrLoaded] = useState(false);
 
   // QR code canvas ref
-  let qrCanvasRef: HTMLCanvasElement | null = null;
-  const setQrRef = (el: HTMLCanvasElement | null) => { qrCanvasRef = el; };
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     const refParam = searchParams.get('ref');
@@ -112,10 +111,10 @@ function PaymentContent() {
 
   // Render QR
   useEffect(() => {
-    if (!qrLoaded || step !== 'pay' || !qrCanvasRef) return;
+    if (!qrLoaded || step !== 'pay' || !qrCanvasRef.current) return;
     const QRCode = (window as any).QRCode;
     if (!QRCode) return;
-    QRCode.toCanvas(qrCanvasRef, MERCHANT_WALLET, {
+    QRCode.toCanvas(qrCanvasRef.current, MERCHANT_WALLET, {
       width: 160,
       margin: 2,
       color: { dark: '#22c55e', light: '#1f2937' },
@@ -244,7 +243,7 @@ function PaymentContent() {
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 text-center">
           <p className="text-gray-400 text-sm mb-3">Scan with your wallet</p>
           <div className="w-40 h-40 mx-auto mb-3 bg-gray-800 rounded-lg overflow-hidden">
-            <canvas ref={setQrRef} />
+            <canvas ref={qrCanvasRef} width={160} height={160} />
           </div>
           <p className="text-gray-500 text-xs">Send {PLAN_PRICE} USDT to the address below</p>
         </div>
