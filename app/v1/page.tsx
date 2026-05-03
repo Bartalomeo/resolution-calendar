@@ -156,9 +156,6 @@ function HomeContent() {
       }),
     });
     await toggleWatchlist(market.id);
-    if (action === 'add' && !telegramConnected) {
-      setShowConnectModal(true);
-    }
   };
 
   const handleBuyPlan = async (plan: 'pro') => {
