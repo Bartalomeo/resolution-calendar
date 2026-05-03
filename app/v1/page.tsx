@@ -308,6 +308,7 @@ function HomeContent() {
               { key: 'crypto' as Category, label: '₿ Crypto' },
               { key: 'politics' as Category, label: '🗳 Politics' },
               { key: 'sports' as Category, label: '⚽ Sports' },
+              { key: 'other' as Category, label: '📌 Other' },
             ].map(cat => (
               <button
                 key={cat.key}
