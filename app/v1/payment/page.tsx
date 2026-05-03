@@ -22,8 +22,8 @@ function PaymentContent() {
   const [txError, setTxError] = useState('');
   const [qrLoaded, setQrLoaded] = useState(false);
 
-  // QR code canvas ref
-  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
+  // QR code container ref
+  const qrContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const refParam = searchParams.get('ref');
@@ -68,10 +68,10 @@ function PaymentContent() {
         setCountdown(PAYMENT_DURATION_SECONDS);
       });
 
-    // Load QR code library
+    // Load QR code library (qrcodejs — browser-only, CDN version)
     if (typeof window !== 'undefined' && !(window as any).QRCode) {
       const script = document.createElement('script');
-      script.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js';
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
       script.onload = () => setQrLoaded(true);
       document.head.appendChild(script);
     } else {
@@ -111,13 +111,18 @@ function PaymentContent() {
 
   // Render QR
   useEffect(() => {
-    if (!qrLoaded || step !== 'pay' || !qrCanvasRef.current) return;
+    if (!qrLoaded || step !== 'pay' || !qrContainerRef.current) return;
     const QRCode = (window as any).QRCode;
     if (!QRCode) return;
-    QRCode.toCanvas(qrCanvasRef.current, MERCHANT_WALLET, {
+    // Clear previous QR if any
+    qrContainerRef.current.innerHTML = '';
+    new QRCode(qrContainerRef.current, {
+      text: MERCHANT_WALLET,
       width: 160,
-      margin: 2,
-      color: { dark: '#22c55e', light: '#1f2937' },
+      height: 160,
+      colorDark: '#22c55e',
+      colorLight: '#1f2937',
+      correctLevel: QRCode.CorrectLevel.L,
     });
   }, [qrLoaded, step]);
 
@@ -242,8 +247,8 @@ function PaymentContent() {
         {/* QR Code */}
         <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 text-center">
           <p className="text-gray-400 text-sm mb-3">Scan with your wallet</p>
-          <div className="w-40 h-40 mx-auto mb-3 bg-gray-800 rounded-lg overflow-hidden">
-            <canvas ref={qrCanvasRef} width={160} height={160} />
+          <div className="w-40 h-40 mx-auto mb-3 bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center">
+            <div ref={qrContainerRef} />
           </div>
           <p className="text-gray-500 text-xs">Send {PLAN_PRICE} USDT to the address below</p>
         </div>
