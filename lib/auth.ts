@@ -42,8 +42,20 @@ export function getSessionFromRequest(request: Request): Promise<{ user: UserSto
   const payload = verifyToken(token);
   if (!payload) return Promise.resolve(null);
 
-  return getUser(payload.userId).then(user => {
+  return getUser(payload.userId).then(async user => {
     if (!user) return null;
+
+    // Check if subscription expired based on currentPeriodEnd
+    if (user.subscription.status === 'active' && user.subscription.currentPeriodEnd) {
+      if (new Date(user.subscription.currentPeriodEnd) < new Date()) {
+        user.subscription = {
+          plan: 'free',
+          status: 'inactive',
+        };
+        await setUser(payload.userId, user);
+      }
+    }
+
     return { user, token };
   });
 }
