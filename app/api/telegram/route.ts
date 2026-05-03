@@ -40,7 +40,7 @@ async function handleCommand(text: string, chat_id: number, username: string) {
   let userId = await getUserIdByChatId(chat_id);
   let store = userId ? await getUser(userId) : null;
 
-  if (text === '/start' || text === '/start@ResolutionCalBot') {
+  if (text === '/start' || text === '/start@Prediction_all_markets_bot') {
     // Auto-generate a userId for this user if not exists
     if (!userId) {
       userId = `tg_${chat_id}`;
@@ -72,7 +72,7 @@ async function handleCommand(text: string, chat_id: number, username: string) {
       `Чтобы добавить рынок — найди его на сайте и нажми 'Notify'`
     );
   }
-  else if (text === '/help' || text === '/help@ResolutionCalBot') {
+  else if (text === '/help' || text === '/help@Prediction_all_markets_bot') {
     await sendMessage(chat_id,
       `📅 <b>Resolution Calendar Bot</b>\n\n` +
       `/start — начать\n` +
@@ -84,7 +84,7 @@ async function handleCommand(text: string, chat_id: number, username: string) {
       `/help — помощь`
     );
   }
-  else if (text === '/list' || text === '/list@ResolutionCalBot') {
+  else if (text === '/list' || text === '/list@Prediction_all_markets_bot') {
     const markets = await getActiveMarkets() as any[];
     const now = new Date();
     const soon = markets
@@ -110,7 +110,7 @@ async function handleCommand(text: string, chat_id: number, username: string) {
     }
     await sendMessage(chat_id, msg);
   }
-  else if (text === '/watchlist' || text === '/watchlist@ResolutionCalBot') {
+  else if (text === '/watchlist' || text === '/watchlist@Prediction_all_markets_bot') {
     if (!store) {
       await sendMessage(chat_id, 'Ты не подписан. Напиши /start');
       return;
@@ -138,7 +138,7 @@ async function handleCommand(text: string, chat_id: number, username: string) {
     }
     await sendMessage(chat_id, msg);
   }
-  else if (text === '/stop' || text === '/stop@ResolutionCalBot') {
+  else if (text === '/stop' || text === '/stop@Prediction_all_markets_bot') {
     if (userId) {
       await deleteUser(userId);
       await deleteChatIdIndex(chat_id);

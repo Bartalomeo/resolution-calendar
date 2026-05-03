@@ -210,7 +210,7 @@ export default function Home() {
               <a href="/v1" className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-400 hover:bg-gray-700">
                 v1
               </a>
-              <a href="https://t.me/ResolutionCalBot" target="_blank" rel="noopener noreferrer"
+              <a href="https://t.me/Prediction_all_markets_bot" target="_blank" rel="noopener noreferrer"
                 className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-300 hover:bg-gray-700">
                 🔔 Telegram
               </a>
@@ -379,7 +379,7 @@ export default function Home() {
               <code className="text-green-400 text-sm break-all">{userId}</code>
             </div>
             <ol className="text-gray-300 text-sm space-y-2 mb-4">
-              <li>1. Открой <a href="https://t.me/ResolutionCalBot" target="_blank" className="text-blue-400 underline">@ResolutionCalBot</a></li>
+              <li>1. Открой <a href="https://t.me/Prediction_all_markets_bot" target="_blank" className="text-blue-400 underline">@Prediction_all_markets_bot</a></li>
               <li>2. Напиши <code className="bg-gray-800 px-1 rounded">/start</code></li>
               <li>3. Напиши <code className="bg-gray-800 px-1 rounded">/connect {userId}</code></li>
             </ol>

@@ -262,7 +262,7 @@ function HomeContent() {
               </button>
 
               <a
-                href="https://t.me/ResolutionCalBot"
+                href="https://t.me/Prediction_all_markets_bot"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
@@ -383,7 +383,7 @@ function HomeContent() {
             <p className="mt-1">
               <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">polymarket.com</a>
               {' • '}
-              <a href="https://t.me/ResolutionCalBot" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">Telegram</a>
+              <a href="https://t.me/Prediction_all_markets_bot" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">Telegram</a>
               {' • '}
               <a href="/" className="hover:text-gray-400">v2.0</a>
             </p>
@@ -404,7 +404,7 @@ function HomeContent() {
               <code className="text-green-400 text-sm break-all">{user?.userId}</code>
             </div>
             <ol className="text-gray-300 text-sm space-y-2 mb-4">
-              <li>1. Open <a href="https://t.me/ResolutionCalBot" target="_blank" className="text-blue-400 underline">@ResolutionCalBot</a></li>
+              <li>1. Open <a href="https://t.me/Prediction_all_markets_bot" target="_blank" className="text-blue-400 underline">@Prediction_all_markets_bot</a></li>
               <li>2. Send <code className="bg-gray-800 px-1 rounded">/start</code></li>
               <li>3. Send <code className="bg-gray-800 px-1 rounded">/connect {user?.userId}</code></li>
             </ol>
