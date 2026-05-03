@@ -170,6 +170,7 @@ function HomeContent() {
     });
     const data = await res.json();
     if (data.ref) {
+      localStorage.setItem('rc_payment_expires', data.expiresAt);
       router.push(`/v1/payment?ref=${encodeURIComponent(data.ref)}&plan=${encodeURIComponent(plan)}`);
     }
   };
