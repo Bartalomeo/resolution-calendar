@@ -4,9 +4,9 @@ import { verifyToken, parseCookies } from '@/lib/auth';
 const PUBLIC_PATHS = [
   '/',
   '/auth',
-  '/v1/subscribe',
-  '/v1/success',
-  '/v1/payment',
+  '/subscribe',
+  '/success',
+  '/payment',
   '/api/auth',
   '/api/markets',
   '/api/cron',
@@ -41,5 +41,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/v1/:path*', '/api/user/:path*'],
+  matcher: ['/:path*', '/api/user/:path*'],
 };

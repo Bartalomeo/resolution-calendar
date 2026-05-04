@@ -194,7 +194,7 @@ function PaymentContent() {
           <div className="text-6xl mb-4">❌</div>
           <h1 className="text-xl font-bold mb-2">Payment failed</h1>
           <p className="text-gray-400 mb-6">{error}</p>
-          <button onClick={() => router.push('/v1')} className="px-6 py-3 bg-blue-600 rounded-lg font-medium">
+          <button onClick={() => router.push('/')} className="px-6 py-3 bg-blue-600 rounded-lg font-medium">
             Back to Calendar
           </button>
         </div>
@@ -210,7 +210,7 @@ function PaymentContent() {
           <h1 className="text-2xl font-bold mb-2">Payment confirmed!</h1>
           <p className="text-gray-400 mb-2">Plan <strong>{PLAN_NAME}</strong> activated.</p>
           <p className="text-gray-500 text-sm mb-6">Valid for 30 days</p>
-          <button onClick={() => router.push('/v1')} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium">
+          <button onClick={() => router.push('/')} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium">
             Open Resolution Calendar
           </button>
         </div>
@@ -236,7 +236,7 @@ function PaymentContent() {
     <div className="min-h-screen bg-gray-950 text-white">
       <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
         <div className="max-w-lg mx-auto px-4 py-4 flex items-center gap-3">
-          <button onClick={() => router.push('/v1')} className="text-gray-500 hover:text-white text-xl">←</button>
+          <button onClick={() => router.push('/')} className="text-gray-500 hover:text-white text-xl">←</button>
           <h1 className="text-xl font-bold">Pay for {PLAN_NAME}</h1>
         </div>
       </header>
@@ -262,7 +262,7 @@ function PaymentContent() {
               </div>
             </div>
             <button
-              onClick={() => router.push('/v1')}
+              onClick={() => router.push('/')}
               className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-gray-400"
             >
               Change

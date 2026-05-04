@@ -1,68 +1,86 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Market } from '@/lib/types';
 import {
   getActiveMarkets,
+  getResolvedMarkets,
   formatVolume,
   formatPrice,
+  getResolutionLabel,
   getHoursUntilResolution,
   isResolvingSoon,
   detectCategory,
   CATEGORY_COLORS,
   CATEGORY_LABELS,
 } from '@/lib/polymarket';
+import { PLANS as CRYPTO_PLANS } from '@/lib/crypto';
+import type { Subscription, UserStore } from '@/lib/redis';
 
-type ViewMode = 'calendar' | 'list';
+type View = 'today' | 'week' | 'month' | 'resolved';
+type Category = 'all' | 'crypto' | 'politics' | 'sports' | 'other';
 
-export default function Home() {
+function HomeContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [markets, setMarkets] = useState<Market[]>([]);
+  const [resolved, setResolved] = useState<Market[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [view, setView] = useState<View>('today');
+  const [category, setCategory] = useState<Category>('all');
   const [watchlist, setWatchlist] = useState<Set<string>>(new Set());
+  const [showWatchlist, setShowWatchlist] = useState(false);
   const [telegramConnected, setTelegramConnected] = useState(false);
-  const [userId, setUserId] = useState<string>('');
+  const [user, setUser] = useState<UserStore | null>(null);
   const [showConnectModal, setShowConnectModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [view, setView] = useState<ViewMode>('calendar');
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [selectedChain, setSelectedChain] = useState<string>('ethereum');
 
-  // Calendar navigation
-  const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date();
-    return new Date(now.getFullYear(), now.getMonth(), 1);
-  });
-
-  useEffect(() => {
-    let uid = localStorage.getItem('rc_user_id');
-    if (!uid) {
-      uid = 'rc_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-      localStorage.setItem('rc_user_id', uid);
-    }
-    setUserId(uid);
-    checkTelegramConnection(uid);
-  }, []);
-
-  const checkTelegramConnection = async (uid: string) => {
+  // Load session on mount
+  const loadSession = useCallback(async () => {
     try {
-      const res = await fetch(`/api/notify?userId=${encodeURIComponent(uid)}`);
+      const res = await fetch('/api/auth/session');
       const data = await res.json();
-      setTelegramConnected(data.connected);
-      if (data.watchlist) {
-        setWatchlist(new Set(data.watchlist));
+      if (data.user) {
+        setUser(data.user);
+        setWatchlist(new Set(data.user.watchlist || []));
+        if (data.user.chat_id) setTelegramConnected(true);
+      } else {
+        setUser(null);
       }
     } catch (e) {
-      console.error('Failed to check connection:', e);
+      console.error('Session error:', e);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
+
+  // Check URL params for payment success
+  useEffect(() => {
+    if (searchParams.get('payment') === 'success') {
+      setShowSuccessToast(true);
+      setTimeout(() => setShowSuccessToast(false), 5000);
+    }
+  }, [searchParams]);
 
   const loadMarkets = useCallback(async () => {
     try {
-      const active = await getActiveMarkets(200);
+      const [active, resolvedData] = await Promise.all([
+        getActiveMarkets(200),
+        getResolvedMarkets(100),
+      ]);
       const withCategory = active.map(m => ({
         ...m,
         _category: detectCategory(m),
       }));
       setMarkets(withCategory);
+      setResolved(resolvedData);
       setLastUpdate(new Date());
     } catch (e) {
       console.error('Failed to load markets:', e);
@@ -77,149 +95,261 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [loadMarkets]);
 
+  const currentPlan = user?.subscription?.plan || 'free';
+  const isSubscribed = user?.subscription?.status === 'active';
+  const WATCHLIST_LIMIT = isSubscribed ? 999 : 5;
+  const canAddToWatchlist = watchlist.size < WATCHLIST_LIMIT || isSubscribed;
+
+  const filteredMarkets = markets
+    .filter(m => {
+      if (view === 'today') return getHoursUntilResolution(m.endDate) <= 24 && getHoursUntilResolution(m.endDate) > 0;
+      if (view === 'week') { const h = getHoursUntilResolution(m.endDate); return h > 0 && h <= 168; }
+      if (view === 'month') return getHoursUntilResolution(m.endDate) > 0;
+      return false;
+    })
+    .filter(m => category === 'all' || (m as any)._category === category)
+    .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
+
+  const watchlistMarkets = markets.filter(m => watchlist.has(m.id));
+  const displayedMarkets = showWatchlist ? watchlistMarkets : filteredMarkets;
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.replace('/auth/login');
+  };
+
+  const toggleWatchlist = async (id: string) => {
+    if (!user) return;
+    if (!canAddToWatchlist && !watchlist.has(id)) {
+      setShowUpgradeModal(true);
+      return;
+    }
+    const action = watchlist.has(id) ? 'remove' : 'add';
+    const newWatchlist = new Set(watchlist);
+    if (action === 'add') newWatchlist.add(id);
+    else newWatchlist.delete(id);
+    setWatchlist(newWatchlist);
+
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.userId, marketId: id, action }),
+    });
+  };
+
   const handleNotify = async (market: Market) => {
-    if (!userId) return;
+    if (!user) return;
     const action = watchlist.has(market.id) ? 'remove' : 'add';
-    try {
-      const res = await fetch('/api/notify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          marketId: market.id,
-          marketQuestion: market.question,
-          action,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        const newWatchlist = new Set(watchlist);
-        if (action === 'add') {
-          newWatchlist.add(market.id);
-          if (!telegramConnected) setShowConnectModal(true);
-        } else {
-          newWatchlist.delete(market.id);
-        }
-        setWatchlist(newWatchlist);
-      }
-    } catch (e) {
-      console.error('Notify error:', e);
+    if (action === 'add' && !canAddToWatchlist) {
+      setShowUpgradeModal(true);
+      return;
     }
-  };
-
-  // --- Calendar Logic ---
-  const getDaysInMonth = (date: Date) => {
-    const year = date.getFullYear();
-    const month = date.getMonth();
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysCount = new Date(year, month + 1, 0).getDate();
-    const prevMonthDays = new Date(year, month, 0).getDate();
-
-    const days: { date: Date; currentMonth: boolean; dateStr: string }[] = [];
-
-    // Prev month days
-    for (let i = firstDay - 1; i >= 0; i--) {
-      const d = new Date(year, month - 1, prevMonthDays - i);
-      days.push({ date: d, currentMonth: false, dateStr: d.toISOString().slice(0, 10) });
-    }
-    // Current month
-    for (let i = 1; i <= daysCount; i++) {
-      const d = new Date(year, month, i);
-      days.push({ date: d, currentMonth: true, dateStr: d.toISOString().slice(0, 10) });
-    }
-    // Next month fill to 42 cells
-    const remaining = 42 - days.length;
-    for (let i = 1; i <= remaining; i++) {
-      const d = new Date(year, month + 1, i);
-      days.push({ date: d, currentMonth: false, dateStr: d.toISOString().slice(0, 10) });
-    }
-    return days;
-  };
-
-  const getMarketsForDate = (dateStr: string) => {
-    return markets.filter(m => {
-      const end = m.endDate?.slice(0, 10);
-      return end === dateStr;
+    await fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId: user.userId,
+        marketId: market.id,
+        marketQuestion: market.question,
+        action,
+      }),
     });
+    await toggleWatchlist(market.id);
   };
 
-  const getSoonMarketsForDate = (dateStr: string) => {
-    // Show markets that resolve ON or BEFORE this date but haven't resolved yet
-    const target = new Date(dateStr).getTime();
-    return markets.filter(m => {
-      const end = new Date(m.endDate).getTime();
-      const now = Date.now();
-      const diff = end - now;
-      if (diff <= 0) return false; // already resolved
-      // Show if resolving within 24h of this date
-      return end <= target + 86400000 && end > now;
+  const handleBuyPlan = async (plan: 'pro') => {
+    setShowUpgradeModal(false);
+    // Create payment and redirect
+    const res = await fetch('/api/crypto/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plan, chain: selectedChain }),
     });
+    const data = await res.json();
+    if (data.ref) {
+      localStorage.setItem('rc_payment_expires', data.expiresAt);
+      localStorage.setItem('rc_payment_created', Date.now().toString());
+      router.push(`/payment?ref=${encodeURIComponent(data.ref)}&plan=${encodeURIComponent(plan)}&chain=${encodeURIComponent(selectedChain)}`);
+    }
   };
 
-  const marketsByDate: Record<string, Market[]> = {};
-  for (const m of markets) {
-    const d = m.endDate?.slice(0, 10);
-    if (d) {
-      if (!marketsByDate[d]) marketsByDate[d] = [];
-      marketsByDate[d].push(m);
-    }
+  const todayCount = markets.filter(m => { const h = getHoursUntilResolution(m.endDate); return h <= 24 && h > 0; }).length;
+  const weekCount = markets.filter(m => { const h = getHoursUntilResolution(m.endDate); return h > 0 && h <= 168; }).length;
+
+  // --- Not logged in: show login prompt ---
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-gray-950 text-white">
+        <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <h1 className="text-xl font-bold text-white flex items-center gap-2">
+              📅 Resolution Calendar <span className="text-xs text-gray-600">(v1)</span>
+            </h1>
+          </div>
+        </header>
+        <main className="max-w-md mx-auto px-4 py-20 text-center">
+          <h2 className="text-2xl font-bold mb-4">Sign in to continue</h2>
+          <p className="text-gray-400 mb-8">
+            Sign in to save your watchlist and get Telegram alerts when markets resolve.
+          </p>
+          <div className="space-y-3">
+            <a
+              href="/auth/login"
+              className="block w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-center"
+            >
+              Sign In / Register
+            </a>
+          </div>
+          <div className="mt-8 p-4 bg-gray-900 rounded-xl border border-gray-800">
+            <p className="text-gray-500 text-xs mb-2">Without signing in:</p>
+            <p className="text-gray-400 text-sm">• Browse all markets</p>
+            <p className="text-gray-400 text-sm">• No watchlist</p>
+            <p className="text-gray-400 text-sm">• No alerts</p>
+          </div>
+        </main>
+      </div>
+    );
   }
-
-  const days = getDaysInMonth(currentMonth);
-  const today = new Date().toISOString().slice(0, 10);
-  const weekDays = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
-
-  const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
-  const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
-
-  const selectedDayMarkets = selectedDate ? (marketsByDate[selectedDate] || getSoonMarketsForDate(selectedDate)) : [];
-  const upcomingDates = Object.keys(marketsByDate).filter(d => d >= today).sort().slice(0, 7);
-
-  const monthLabel = currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      {/* Success toast */}
+      {showSuccessToast && (
+        <div className="fixed top-4 right-4 z-50 bg-green-900 border border-green-700 text-white px-4 py-3 rounded-lg shadow-lg text-sm">
+          ✅ Payment confirmed! {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} activated.
+        </div>
+      )}
+
       {/* Header */}
       <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
+        <div className="max-w-4xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                📅 Resolution Calendar
+                📅 Resolution Calendar <span className="text-xs text-gray-600">(v1)</span>
               </h1>
               <p className="text-xs text-gray-500">
-                Polymarket • {markets.length} active
-                {lastUpdate && ` • Updated ${lastUpdate.toLocaleTimeString()}`}
+                {markets.length} active markets{lastUpdate && ` • Updated ${lastUpdate.toLocaleTimeString()}`}
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <div className="flex bg-gray-800 rounded-lg p-1">
-                <button
-                  onClick={() => setView('calendar')}
-                  className={`px-3 py-1 rounded text-sm ${view === 'calendar' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}
-                >
-                  Calendar
-                </button>
-                <button
-                  onClick={() => setView('list')}
-                  className={`px-3 py-1 rounded text-sm ${view === 'list' ? 'bg-blue-600 text-white' : 'text-gray-400'}`}
-                >
-                  List
-                </button>
-              </div>
-              <a href="/v1" className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-400 hover:bg-gray-700">
-                v1
-              </a>
-              <a href="https://t.me/Prediction_all_markets_bot" target="_blank" rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-300 hover:bg-gray-700">
+              {/* Plan badge */}
+              <button
+                onClick={() => setShowUpgradeModal(true)}
+                className={`px-3 py-1.5 rounded text-sm font-medium ${
+                  isSubscribed
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                {isSubscribed ? 'PRO' : 'FREE'}
+                {!isSubscribed && ' → UPGRADE'}
+              </button>
+
+              <button
+                onClick={() => setShowWatchlist(!showWatchlist)}
+                className={`px-3 py-1.5 rounded text-sm ${
+                  showWatchlist
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                }`}
+              >
+                ★ Watchlist ({watchlist.size}{!isSubscribed && `/${WATCHLIST_LIMIT}`})
+              </button>
+
+              <a
+                href="https://t.me/Prediction_all_markets_bot"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
+              >
                 🔔 Telegram
               </a>
+
+              <button
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-400 hover:bg-gray-700"
+              >
+                {loggingOut ? '...' : '🚪'}
+              </button>
             </div>
+          </div>
+
+          {/* View tabs */}
+          <div className="flex gap-2 mt-4">
+            {[
+              { key: 'today' as View, label: `Today (${todayCount})`, color: 'text-red-400' },
+              { key: 'week' as View, label: `This Week (${weekCount})`, color: 'text-yellow-400' },
+              { key: 'month' as View, label: 'All', color: 'text-gray-400' },
+              { key: 'resolved' as View, label: 'Resolved', color: 'text-gray-400' },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setView(tab.key)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                  view === tab.key ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
+                }`}
+              >
+                <span className={view === tab.key ? tab.color : ''}>{tab.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6">
+      {/* Category filters */}
+      <div className="border-b border-gray-800">
+        <div className="max-w-4xl mx-auto px-4 py-3">
+          <div className="flex gap-2 flex-wrap">
+            {[
+              { key: 'all' as Category, label: 'All' },
+              { key: 'crypto' as Category, label: '₿ Crypto' },
+              { key: 'politics' as Category, label: '🗳 Politics' },
+              { key: 'sports' as Category, label: '⚽ Sports' },
+              { key: 'other' as Category, label: '📌 Other' },
+            ].map(cat => (
+              <button
+                key={cat.key}
+                onClick={() => setCategory(cat.key)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                  category === cat.key
+                    ? 'bg-gray-700 text-white'
+                    : 'bg-gray-900 text-gray-400 hover:bg-gray-800'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Free tier banner */}
+      {!isSubscribed && (
+        <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border-b border-blue-800/50">
+          <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-white">
+                💎 Unlimited watchlist + priority alerts
+              </p>
+              <p className="text-xs text-gray-400">
+                Free: {WATCHLIST_LIMIT} markets max. Pro $4.99/mo.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowUpgradeModal(true)}
+              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
+            >
+              UPGRADE →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Main content */}
+      <main className="max-w-4xl mx-auto px-4 py-6">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
@@ -227,142 +357,28 @@ export default function Home() {
               <p className="text-gray-500">Loading markets...</p>
             </div>
           </div>
-        ) : view === 'calendar' ? (
-          <div>
-            {/* Calendar Navigation */}
-            <div className="flex items-center justify-between mb-4">
-              <button onClick={prevMonth} className="px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-white text-lg">◀</button>
-              <h2 className="text-xl font-bold text-white">{monthLabel}</h2>
-              <button onClick={nextMonth} className="px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-white text-lg">▶</button>
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="bg-gray-900 rounded-xl border border-gray-800 overflow-hidden">
-              {/* Week day headers */}
-              <div className="grid grid-cols-7 border-b border-gray-800">
-                {weekDays.map(d => (
-                  <div key={d} className="py-2 text-center text-xs font-medium text-gray-500">{d}</div>
-                ))}
-              </div>
-
-              {/* Day cells */}
-              <div className="grid grid-cols-7">
-                {days.map(({ date, currentMonth, dateStr }, idx) => {
-                  const dayMarkets = marketsByDate[dateStr] || [];
-                  const isToday = dateStr === today;
-                  const isSelected = dateStr === selectedDate;
-                  const soonMarkets = !currentMonth ? [] : getSoonMarketsForDate(dateStr);
-                  const hasSoon = soonMarkets.length > 0 && dayMarkets.length === 0;
-                  const showCount = dayMarkets.length > 0 || (hasSoon && soonMarkets.length > 0);
-
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => currentMonth ? setSelectedDate(isSelected ? null : dateStr) : null}
-                      className={`
-                        min-h-24 p-2 border-b border-r border-gray-800 cursor-pointer transition
-                        ${!currentMonth ? 'bg-gray-950 text-gray-600' : 'bg-gray-900 hover:bg-gray-800'}
-                        ${isToday ? 'border-l-2 border-l-blue-500' : ''}
-                        ${isSelected ? 'bg-blue-950 border border-blue-600' : ''}
-                      `}
-                    >
-                      <div className={`text-sm font-medium mb-1 ${isToday ? 'text-blue-400' : currentMonth ? 'text-white' : 'text-gray-600'}`}>
-                        {date.getDate()}
-                      </div>
-                      {showCount && (
-                        <div className="space-y-0.5">
-                          {dayMarkets.slice(0, 2).map(m => {
-                            const cat = (m as any)._category || 'other';
-                            return (
-                              <div key={m.id} className="text-xs truncate" style={{ color: CATEGORY_COLORS[cat] }}>
-                                {m.question?.slice(0, 25)}...
-                              </div>
-                            );
-                          })}
-                          {dayMarkets.length > 2 && (
-                            <div className="text-xs text-gray-500">+{dayMarkets.length - 2} more</div>
-                          )}
-                          {hasSoon && dayMarkets.length === 0 && soonMarkets.slice(0, 2).map(m => (
-                            <div key={m.id} className="text-xs text-red-400 truncate opacity-60">
-                              ~{m.question?.slice(0, 20)}...
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Upcoming dates quick nav */}
-            <div className="mt-4">
-              <h3 className="text-sm font-medium text-gray-400 mb-2">📅 Upcoming Resolutions</h3>
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {upcomingDates.map(d => {
-                  const count = marketsByDate[d]?.length || 0;
-                  const dateLabel = new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                  return (
-                    <button
-                      key={d}
-                      onClick={() => setSelectedDate(d)}
-                      className={`flex-shrink-0 px-3 py-2 rounded-lg border text-sm transition ${
-                        selectedDate === d
-                          ? 'bg-blue-600 border-blue-500 text-white'
-                          : 'bg-gray-900 border-gray-700 text-gray-300 hover:border-gray-600'
-                      }`}
-                    >
-                      <div className="text-xs text-gray-500">{dateLabel}</div>
-                      <div className="font-medium">{count} market{count !== 1 ? 's' : ''}</div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Selected day detail */}
-            {selectedDate && (
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-bold text-white">
-                    📅 {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                  </h3>
-                  <button onClick={() => setSelectedDate(null)} className="text-gray-500 hover:text-white text-sm">✕</button>
-                </div>
-                {selectedDayMarkets.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <p>No markets resolving exactly on this date.</p>
-                    <p className="text-sm mt-1">Markets within ±1 day shown.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {selectedDayMarkets.map(market => (
-                      <MarketCard key={market.id} market={market} watchlist={watchlist} onNotify={handleNotify} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+        ) : view === 'resolved' ? (
+          <ResolvedSection markets={resolved} />
         ) : (
-          /* List view */
-          <div>
-            <h2 className="text-lg font-bold text-white mb-4">All Active Markets</h2>
-            <div className="space-y-3">
-              {markets
-                .sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime())
-                .slice(0, 50)
-                .map(market => (
-                  <MarketCard key={market.id} market={market} watchlist={watchlist} onNotify={handleNotify} />
-                ))}
-            </div>
-          </div>
+          <MarketList
+            markets={displayedMarkets}
+            watchlist={watchlist}
+            onToggleWatchlist={toggleWatchlist}
+            onNotify={handleNotify}
+            telegramConnected={telegramConnected}
+            canAddToWatchlist={canAddToWatchlist}
+            isSubscribed={isSubscribed}
+            watchlistLimit={WATCHLIST_LIMIT}
+          />
         )}
       </main>
 
+      {/* Footer */}
       <footer className="border-t border-gray-800 mt-12">
-        <div className="max-w-5xl mx-auto px-4 py-6 text-center text-gray-600 text-sm">
-          <p>Resolution Calendar v2.0 • <a href="https://polymarket.com" target="_blank" rel="noopener noreferrer" className="hover:text-gray-400">polymarket.com</a> • <a href="/v1" className="hover:text-gray-400">v1.0</a></p>
+        <div className="max-w-4xl mx-auto px-4 py-6">
+          <div className="text-center text-gray-600 text-sm">
+            <p>Resolution Calendar</p>
+          </div>
         </div>
       </footer>
 
@@ -370,28 +386,109 @@ export default function Home() {
       {showConnectModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
           <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-white mb-2">🔔 Подключи Telegram</h2>
+            <h2 className="text-xl font-bold text-white mb-2">🔔 Connect Telegram</h2>
             <p className="text-gray-400 text-sm mb-4">
-              Чтобы получать уведомления о резолвах, привяжи Telegram к своему профилю.
+              Link your Telegram to get alerts when markets resolve.
             </p>
             <div className="bg-gray-800 rounded-lg p-3 mb-4">
-              <p className="text-gray-400 text-xs mb-1">Твой ID:</p>
-              <code className="text-green-400 text-sm break-all">{userId}</code>
+              <p className="text-gray-400 text-xs mb-1">Your user ID:</p>
+              <code className="text-green-400 text-sm break-all">{user?.userId}</code>
             </div>
             <ol className="text-gray-300 text-sm space-y-2 mb-4">
-              <li>1. Открой <a href="https://t.me/Prediction_all_markets_bot" target="_blank" className="text-blue-400 underline">@Prediction_all_markets_bot</a></li>
-              <li>2. Напиши <code className="bg-gray-800 px-1 rounded">/start</code></li>
-              <li>3. Напиши <code className="bg-gray-800 px-1 rounded">/connect {userId}</code></li>
+              <li>1. Open <a href="https://t.me/Prediction_all_markets_bot" target="_blank" className="text-blue-400 underline">@Prediction_all_markets_bot</a></li>
+              <li>2. Send <code className="bg-gray-800 px-1 rounded">/start</code></li>
+              <li>3. Send <code className="bg-gray-800 px-1 rounded">/connect {user?.userId}</code></li>
             </ol>
             <div className="flex gap-2">
-              <button onClick={() => setShowConnectModal(false)}
-                className="flex-1 px-4 py-2 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 text-sm">
-                Позже
+              <button
+                onClick={() => setShowConnectModal(false)}
+                className="flex-1 px-4 py-2 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 text-sm"
+              >
+                Later
               </button>
-              <button onClick={() => { navigator.clipboard.writeText(`/connect ${userId}`); }}
-                className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm">
-                📋 Скопировать
+              <button
+                onClick={() => navigator.clipboard.writeText(`/connect ${user?.userId}`)}
+                className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
+              >
+                📋 Copy
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-white">Choose a plan</h2>
+              <button
+                onClick={() => setShowUpgradeModal(false)}
+                className="text-gray-500 hover:text-white text-xl"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="grid gap-4">
+              {(['pro'] as const).map((key) => {
+                const plan = CRYPTO_PLANS[key];
+                return (
+                  <div
+                    key={key}
+                    className="rounded-xl border border-blue-500 bg-blue-950/30 p-5"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div>
+                        <h3 className="text-lg font-bold text-white">{plan.name}</h3>
+                        <p className="text-xs text-gray-400">${plan.priceUsdt}/mo (USDT)</p>
+                      </div>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-600 text-white">
+                        PRO
+                      </span>
+                    </div>
+                    <ul className="space-y-1 mb-4">
+                      {plan.features.map((f, i) => (
+                        <li key={i} className="text-sm text-gray-300 flex items-center gap-2">
+                          <span className="text-green-400 text-xs">✓</span> {f}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      onClick={() => handleBuyPlan(key)}
+                      className="w-full py-2.5 rounded-lg font-medium transition bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      Buy for ${plan.priceUsdt} USDT
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mt-4 p-3 bg-gray-800 rounded-lg">
+              <p className="text-gray-400 text-xs mb-2">Select network:</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'ethereum', label: 'Ethereum', icon: 'Ξ' },
+                  { key: 'base', label: 'Base', icon: '◎' },
+                  { key: 'polygon', label: 'Polygon', icon: '⬡' },
+                  { key: 'arbitrum', label: 'Arbitrum', icon: '◆' },
+                ].map(net => (
+                  <button
+                    key={net.key}
+                    onClick={() => setSelectedChain(net.key)}
+                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                      selectedChain === net.key
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
+                  >
+                    <span>{net.icon}</span>
+                    <span>{net.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -400,61 +497,179 @@ export default function Home() {
   );
 }
 
-function MarketCard({ market, watchlist, onNotify }: { market: Market; watchlist: Set<string>; onNotify: (m: Market) => void }) {
-  const hours = getHoursUntilResolution(market.endDate);
-  const soon = isResolvingSoon(market.endDate, 24);
-  const category = (market as any)._category || 'other';
-  const catColor = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
-  const prices = market.outcomePrices || ['0.5', '0.5'];
-  const outcomes = market.outcomes || ['Yes', 'No'];
-  const endDate = market.endDate ? new Date(market.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A';
+function ResolvedSection({ markets }: { markets: Market[] }) {
+  const recent = markets.slice(0, 50);
+  if (recent.length === 0) {
+    return <div className="text-center py-12 text-gray-500">No resolved markets yet</div>;
+  }
+  return (
+    <div className="space-y-3">
+      <h2 className="text-lg font-semibold text-gray-300 mb-4">Recently Resolved</h2>
+      {recent.map(market => {
+        const prices = market.outcomePrices || [];
+        const winner = prices.indexOf('1');
+        return (
+          <div key={market.id} className="bg-gray-900 rounded-lg p-4 border border-gray-800">
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <p className="text-white font-medium">{market.question}</p>
+                <p className="text-gray-500 text-sm mt-1">
+                  Resolved {new Date(market.endDate).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="text-right">
+                <div className="flex gap-1">
+                  {(market.outcomes || ['Yes', 'No']).map((outcome, i) => (
+                    <span
+                      key={i}
+                      className={`px-2 py-0.5 rounded text-xs font-medium ${
+                        winner === i ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-500'
+                      }`}
+                    >
+                      {outcome} {winner === i ? '✓' : ''}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-gray-600 text-xs mt-1">Vol: {formatVolume(market.volume || 0)}</p>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function MarketList({
+  markets,
+  watchlist,
+  onToggleWatchlist,
+  onNotify,
+  telegramConnected,
+  canAddToWatchlist,
+  isSubscribed,
+  watchlistLimit,
+}: {
+  markets: Market[];
+  watchlist: Set<string>;
+  onToggleWatchlist: (id: string) => void;
+  onNotify: (market: Market) => void;
+  telegramConnected: boolean;
+  canAddToWatchlist: boolean;
+  isSubscribed: boolean;
+  watchlistLimit: number;
+}) {
+  if (markets.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        {watchlist.size === 0 ? 'No markets in this view' : 'No markets in your watchlist match this filter'}
+      </div>
+    );
+  }
 
   return (
-    <div className={`bg-gray-900 rounded-lg p-4 border transition ${soon ? 'border-red-600/50 bg-red-950/20' : 'border-gray-800 hover:border-gray-700'}`}>
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: `${catColor}20`, color: catColor }}>
-            {CATEGORY_LABELS[category]}
-          </span>
-          {soon && (
-            <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-900/50 text-red-400">🔴 Soon</span>
-          )}
-        </div>
-        <span className={`text-sm font-medium ${soon ? 'text-red-400' : 'text-gray-400'}`}>
-          ⏰ {endDate}
-        </span>
-      </div>
+    <div className="space-y-3">
+      {markets.map(market => {
+        const hours = getHoursUntilResolution(market.endDate);
+        const soon = isResolvingSoon(market.endDate, 24);
+        const category = (market as any)._category || 'other';
+        const catColor = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
+        const prices = market.outcomePrices || ['0.5', '0.5'];
 
-      <a href={`https://polymarket.com/event/${market.slug}`} target="_blank" rel="noopener noreferrer" className="block">
-        <h3 className="text-white font-medium hover:text-blue-400 transition">{market.question}</h3>
-      </a>
-
-      <div className="flex items-center gap-4 mt-3">
-        <div className="flex gap-2">
-          {outcomes.map((outcome, i) => (
-            <div key={i} className="flex items-center gap-1">
-              <span className="text-gray-400 text-sm">{outcome}:</span>
-              <span className={`font-medium ${parseFloat(prices[i] || '0') > 0.5 ? 'text-green-400' : 'text-gray-300'}`}>
-                {formatPrice(prices[i] || '0.5')}
+        return (
+          <div
+            key={market.id}
+            className={`bg-gray-900 rounded-lg p-4 border transition ${
+              soon ? 'border-red-600/50 bg-red-950/20' : 'border-gray-800'
+            } hover:border-gray-700`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className="px-2 py-0.5 rounded text-xs font-medium"
+                  style={{ backgroundColor: `${catColor}20`, color: catColor }}
+                >
+                  {CATEGORY_LABELS[category]}
+                </span>
+                {soon && (
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-900/50 text-red-400">
+                    🔴 Soon
+                  </span>
+                )}
+              </div>
+              <span className={`text-sm font-medium ${soon ? 'text-red-400' : 'text-gray-400'}`}>
+                ⏰ {getResolutionLabel(market.endDate)}
               </span>
             </div>
-          ))}
-        </div>
-        <div className="text-gray-500 text-sm">Vol: {formatVolume(market.volume || 0)}</div>
-      </div>
 
-      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
-        <button
-          onClick={() => onNotify(market)}
-          className={`px-3 py-1.5 rounded text-xs font-medium transition ${watchlist.has(market.id) ? 'bg-yellow-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-        >
-          {watchlist.has(market.id) ? '★ In Watchlist' : '☆ Watch'}
-        </button>
-        <a href={`https://polymarket.com/event/${market.slug}`} target="_blank" rel="noopener noreferrer"
-          className="ml-auto px-3 py-1.5 rounded text-xs font-medium bg-gray-800 text-gray-400 hover:bg-gray-700 transition">
-          Trade →
-        </a>
-      </div>
+            <a
+              href={`https://polymarket.com/event/${market.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block"
+            >
+              <h3 className="text-white font-medium hover:text-blue-400 transition">
+                {market.question}
+              </h3>
+            </a>
+
+            <div className="flex items-center gap-4 mt-3">
+              <div className="flex gap-2">
+                {(market.outcomes || ['Yes', 'No']).map((outcome, i) => (
+                  <div key={i} className="flex items-center gap-1">
+                    <span className="text-gray-400 text-sm">{outcome}:</span>
+                    <span className={`font-medium ${parseFloat(prices[i] || '0') > 0.5 ? 'text-green-400' : 'text-gray-300'}`}>
+                      {formatPrice(prices[i] || '0.5')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="text-gray-500 text-sm">
+                Vol: {formatVolume(market.volume || 0)}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
+              <button
+                onClick={() => onToggleWatchlist(market.id)}
+                className={`px-3 py-1.5 rounded text-xs font-medium transition ${
+                  watchlist.has(market.id)
+                    ? 'bg-yellow-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                }`}
+              >
+                {watchlist.has(market.id) ? '★ In Watchlist' : `☆ Watchlist${!isSubscribed ? ` (${watchlist.size}/${watchlistLimit})` : ''}`}
+              </button>
+              <button
+                onClick={() => onNotify(market)}
+                className="px-3 py-1.5 rounded text-xs font-medium bg-blue-900/50 text-blue-400 hover:bg-blue-900 transition"
+              >
+                🔔 Alert
+              </button>
+              <a
+                href={`https://polymarket.com/event/${market.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-auto px-3 py-1.5 rounded text-xs font-medium bg-gray-800 text-gray-400 hover:bg-gray-700 transition"
+              >
+                Trade →
+              </a>
+            </div>
+          </div>
+        );
+      })}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
