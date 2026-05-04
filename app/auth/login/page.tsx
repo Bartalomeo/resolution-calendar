@@ -191,7 +191,7 @@ export default function LoginPage() {
 
         {/* Back to home */}
         <motion.div variants={fadeUp} className="text-center mt-4">
-          <a href="/new" className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors">
+          <a href="/" className="text-zinc-600 hover:text-zinc-400 text-xs transition-colors">
             ← Back to home
           </a>
         </motion.div>
