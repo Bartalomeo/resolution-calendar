@@ -4,24 +4,19 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Market } from '@/lib/types';
 import {
   getActiveMarkets,
-  getResolvedMarkets,
   formatVolume,
-  formatPrice,
-  getResolutionLabel,
   getHoursUntilResolution,
   isResolvingSoon,
   detectCategory,
   CATEGORY_COLORS,
 } from '@/lib/polymarket';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 import {
   TrendingUp,
-  Clock,
   Zap,
   BarChart3,
   ChevronRight,
   Search,
-  Filter,
   X,
   Globe,
   Shield,
@@ -29,27 +24,26 @@ import {
   ArrowUpRight,
   Activity,
   Timer,
-  Eye,
   Bookmark,
 } from 'lucide-react';
 
 // ─── Animations ─────────────────────────────────────────────────────────────
 
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 30 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.46, 0.45, 0.94] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' as const } },
 };
 
-const stagger = {
+const stagger: Variants = {
   visible: { transition: { staggerChildren: 0.08 } },
 };
 
-const scaleIn = {
+const scaleIn: Variants = {
   hidden: { opacity: 0, scale: 0.9 },
-  visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: 'backOut' } },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: 'backOut' as const } },
 };
 
-const slideIn = {
+const slideIn: Variants = {
   hidden: { opacity: 0, x: -20 },
   visible: { opacity: 1, x: 0, transition: { duration: 0.4 } },
 };
