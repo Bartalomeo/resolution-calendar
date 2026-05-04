@@ -2,23 +2,29 @@
 
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { motion, type Variants } from 'framer-motion';
+import { CheckCircle2, XCircle, Loader2, Copy, ChevronLeft, Wallet, Clock } from 'lucide-react';
 
 const MERCHANT_WALLET = '0x341bACc53cc14EecF2cE5bd294826eB0740b100F';
 const PLAN_PRICE = 4.99;
 const PLAN_NAME = 'Pro';
-const PAYMENT_DURATION_SECONDS = 30 * 60; // 30 minutes
+const PAYMENT_DURATION_SECONDS = 30 * 60;
 
-const CHAINS: Record<string, { name: string; icon: string; currency: string }> = {
-  ethereum: { name: 'Ethereum', icon: 'Ξ', currency: 'USDT (ERC-20)' },
-  base: { name: 'Base', icon: '◎', currency: 'USDT (Base)' },
-  polygon: { name: 'Polygon', icon: '⬡', currency: 'USDT (Polygon)' },
-  arbitrum: { name: 'Arbitrum', icon: '◆', currency: 'USDT (Arbitrum)' },
+const CHAINS: Record<string, { name: string; icon: string; color: string; currency: string }> = {
+  ethereum: { name: 'Ethereum', icon: 'Ξ', color: '#627EEA', currency: 'USDT (ERC-20)' },
+  base: { name: 'Base', icon: '◎', color: '#0052FF', currency: 'USDT (Base)' },
+  polygon: { name: 'Polygon', icon: '⬡', color: '#8247E5', currency: 'USDT (Polygon)' },
+  arbitrum: { name: 'Arbitrum', icon: '◆', color: '#28A0F0', currency: 'USDT (Arbitrum)' },
+};
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' as const } },
 };
 
 function PaymentContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-
   const [step, setStep] = useState<'loading' | 'pay' | 'verifying' | 'done' | 'error'>('loading');
   const [ref, setRef] = useState('');
   const [plan, setPlan] = useState('');
@@ -29,8 +35,7 @@ function PaymentContent() {
   const [countdown, setCountdown] = useState<number>(PAYMENT_DURATION_SECONDS);
   const [txError, setTxError] = useState('');
   const [qrLoaded, setQrLoaded] = useState(false);
-
-  // QR code container ref
+  const [copied, setCopied] = useState(false);
   const qrContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -47,11 +52,8 @@ function PaymentContent() {
 
     setRef(refParam);
     setPlan(planParam);
-    if (chainParam && CHAINS[chainParam]) {
-      setChain(chainParam);
-    }
+    if (chainParam && CHAINS[chainParam]) setChain(chainParam);
 
-    // Check payment status from API (no auth needed to check by ref)
     fetch(`/api/crypto/status?ref=${encodeURIComponent(refParam)}`)
       .then(res => res.json())
       .then(data => {
@@ -62,7 +64,6 @@ function PaymentContent() {
           setError('Payment expired. Please create a new one.');
         } else {
           setStep('pay');
-          // Start 30 min countdown from now
           const created = localStorage.getItem('rc_payment_created');
           const createdMs = created ? parseInt(created, 10) : Date.now();
           const elapsed = Math.floor((Date.now() - createdMs) / 1000);
@@ -75,12 +76,10 @@ function PaymentContent() {
         }
       })
       .catch(() => {
-        // Network error — show payment form anyway
         setStep('pay');
         setCountdown(PAYMENT_DURATION_SECONDS);
       });
 
-    // Load QR code library (qrcodejs — browser-only, CDN version)
     if (typeof window !== 'undefined' && !(window as any).QRCode) {
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js';
@@ -90,13 +89,9 @@ function PaymentContent() {
       setQrLoaded(true);
     }
 
-    // If txHash in URL — verify immediately
-    if (txParam) {
-      setTxHash(txParam);
-    }
+    if (txParam) setTxHash(txParam);
   }, [searchParams]);
 
-  // Countdown timer
   useEffect(() => {
     if (step !== 'pay' || countdown <= 0) return;
     const interval = setInterval(() => {
@@ -112,29 +107,17 @@ function PaymentContent() {
     return () => clearInterval(interval);
   }, [step, countdown]);
 
-  // Verify txHash if passed in URL
-  useEffect(() => {
-    const txParam = searchParams.get('txHash');
-    if (step === 'pay' && txParam && !verifying) {
-      setTxHash(txParam);
-    }
-  }, [step, verifying, searchParams]);
-
-  // Render QR
   useEffect(() => {
     if (!qrLoaded || step !== 'pay' || !qrContainerRef.current) return;
     const QRCode = (window as any).QRCode;
     if (!QRCode) return;
-    // Clear previous QR if any
     qrContainerRef.current.innerHTML = '';
-    // Build a payment URI: e.g.ethereum:0x...?value=... or just the address
-    // For wallets: we embed the address as a plain address (works on all chains)
     new QRCode(qrContainerRef.current, {
       text: MERCHANT_WALLET,
       width: 160,
       height: 160,
-      colorDark: '#22c55e',
-      colorLight: '#1f2937',
+      colorDark: '#10b981',
+      colorLight: '#18181b',
       correctLevel: QRCode.CorrectLevel.L,
     });
   }, [qrLoaded, step]);
@@ -172,156 +155,259 @@ function PaymentContent() {
     }
   };
 
+  const copyAddress = () => {
+    navigator.clipboard.writeText(MERCHANT_WALLET);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   const minutes = Math.floor(countdown / 60);
   const seconds = countdown % 60;
   const chainInfo = CHAINS[chain] || CHAINS.ethereum;
+  const urgent = countdown < 300;
 
   if (step === 'loading') {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-400">Preparing payment...</p>
-        </div>
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+          className="w-12 h-12 border-2 border-violet-500 border-t-transparent rounded-full"
+        />
       </div>
     );
   }
 
   if (step === 'error') {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
-        <div className="text-center max-w-sm">
-          <div className="text-6xl mb-4">❌</div>
-          <h1 className="text-xl font-bold mb-2">Payment failed</h1>
-          <p className="text-gray-400 mb-6">{error}</p>
-          <button onClick={() => router.push('/')} className="px-6 py-3 bg-blue-600 rounded-lg font-medium">
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center max-w-sm"
+        >
+          <div className="w-20 h-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto mb-6">
+            <XCircle className="w-10 h-10 text-red-400" />
+          </div>
+          <h1 className="text-2xl font-bold mb-2">Payment failed</h1>
+          <p className="text-zinc-400 mb-6">{error}</p>
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-6 py-3 rounded-xl font-medium"
+          >
             Back to Calendar
-          </button>
-        </div>
+          </a>
+        </motion.div>
       </div>
     );
   }
 
   if (step === 'done') {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
-        <div className="text-center max-w-sm">
-          <div className="text-6xl mb-4">✅</div>
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="text-center max-w-sm"
+        >
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 15 }}
+            className="w-20 h-20 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-6"
+          >
+            <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+          </motion.div>
           <h1 className="text-2xl font-bold mb-2">Payment confirmed!</h1>
-          <p className="text-gray-400 mb-2">Plan <strong>{PLAN_NAME}</strong> activated.</p>
-          <p className="text-gray-500 text-sm mb-6">Valid for 30 days</p>
-          <button onClick={() => router.push('/')} className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium">
+          <p className="text-zinc-400 mb-2">Plan <strong className="text-white">{PLAN_NAME}</strong> activated.</p>
+          <p className="text-zinc-600 text-sm mb-8">Valid for 30 days</p>
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-6 py-3 rounded-xl font-medium"
+          >
             Open Resolution Calendar
-          </button>
-        </div>
+          </a>
+        </motion.div>
       </div>
     );
   }
 
   if (step === 'verifying') {
     return (
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center p-4">
-        <div className="text-center max-w-sm">
-          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center max-w-sm"
+        >
+          <div className="w-16 h-16 border-[3px] border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-6" />
           <h1 className="text-xl font-bold mb-2">Verifying transaction...</h1>
-          <p className="text-gray-400 text-sm mb-2">Checking {chainInfo.name} blockchain</p>
-          <code className="text-green-400 text-xs break-all">{txHash}</code>
-        </div>
+          <p className="text-zinc-400 text-sm mb-4">Checking {chainInfo.name} blockchain</p>
+          <code className="text-emerald-400 text-xs break-all px-3 py-2 bg-zinc-900/60 rounded-lg inline-block">{txHash}</code>
+        </motion.div>
       </div>
     );
   }
 
   // step === 'pay'
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
-      <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
-        <div className="max-w-lg mx-auto px-4 py-4 flex items-center gap-3">
-          <button onClick={() => router.push('/')} className="text-gray-500 hover:text-white text-xl">←</button>
-          <h1 className="text-xl font-bold">Pay for {PLAN_NAME}</h1>
+    <div className="min-h-screen bg-[#0A0A0A] text-white relative">
+      {/* Background */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div
+          className="absolute w-[500px] h-[500px] rounded-full blur-[150px] opacity-10"
+          style={{
+            background: `radial-gradient(circle, ${chainInfo.color} 0%, transparent 70%)`,
+            left: '50%',
+            top: '30%',
+            transform: 'translate(-50%, -50%)',
+          }}
+        />
+      </div>
+
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-zinc-800/50 backdrop-blur-xl bg-[#0A0A0A]/80">
+        <div className="max-w-lg mx-auto px-4 h-16 flex items-center gap-3">
+          <a href="/" className="text-zinc-500 hover:text-white transition-colors">
+            <ChevronLeft className="w-5 h-5" />
+          </a>
+          <h1 className="text-lg font-semibold">Checkout</h1>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-8 space-y-4">
-
-        {/* Timer */}
-        <div className="text-center">
-          <p className="text-gray-500 text-xs mb-1">Time to pay:</p>
-          <p className={`text-2xl font-mono font-bold ${countdown < 300 ? 'text-red-400' : 'text-white'}`}>
-            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
-          </p>
-        </div>
-
-        {/* Chain badge */}
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-4">
+      <main className="max-w-lg mx-auto px-4 py-8 space-y-4 relative">
+        {/* Timer + Chain */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-2xl p-5 border border-zinc-800/60"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Wallet className="w-4 h-4 text-zinc-500" />
+              <span className="text-sm text-zinc-400">Pay with</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg" style={{ backgroundColor: `${chainInfo.color}15`, border: `1px solid ${chainInfo.color}30` }}>
+              <span className="text-sm font-medium" style={{ color: chainInfo.color }}>{chainInfo.icon} {chainInfo.name}</span>
+            </div>
+          </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-lg">{chainInfo.icon}</span>
-              <div>
-                <p className="text-white text-sm font-medium">{chainInfo.name}</p>
-                <p className="text-gray-500 text-xs">{chainInfo.currency}</p>
-              </div>
+              <Clock className="w-4 h-4 text-zinc-500" />
+              <span className="text-sm text-zinc-400">Time left</span>
             </div>
-            <button
-              onClick={() => router.push('/')}
-              className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-gray-400"
-            >
-              Change
-            </button>
+            <span className={`text-xl font-mono font-bold ${urgent ? 'text-red-400' : 'text-white'}`}>
+              {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+            </span>
           </div>
-        </div>
+        </motion.div>
 
         {/* Amount */}
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 text-center">
-          <p className="text-gray-400 text-sm mb-1">Amount</p>
-          <p className="text-3xl font-bold">{PLAN_PRICE} <span className="text-lg text-gray-400">USDT</span></p>
-          <p className="text-gray-500 text-xs mt-1">{chainInfo.currency}</p>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.05 }}
+          className="glass-card rounded-2xl p-6 text-center border border-zinc-800/60"
+        >
+          <p className="text-zinc-400 text-sm mb-2">Amount to pay</p>
+          <p className="text-4xl font-bold">
+            {PLAN_PRICE}{' '}
+            <span className="text-lg text-zinc-400 font-normal">USDT</span>
+          </p>
+          <p className="text-zinc-600 text-xs mt-2">{chainInfo.currency}</p>
+          <div className="mt-4 inline-flex items-center gap-2 px-3 py-1.5 bg-violet-500/10 border border-violet-500/20 rounded-full text-sm text-violet-300">
+            <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
+            {PLAN_NAME} Plan · 30 days
+          </div>
+        </motion.div>
 
         {/* QR Code */}
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-5 text-center">
-          <p className="text-gray-400 text-sm mb-3">Scan with your {chainInfo.name} wallet</p>
-          <div className="w-40 h-40 mx-auto mb-3 bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="glass-card rounded-2xl p-5 text-center border border-zinc-800/60"
+        >
+          <p className="text-zinc-400 text-sm mb-4">Scan with your {chainInfo.name} wallet</p>
+          <div
+            className="w-40 h-40 mx-auto mb-4 rounded-xl overflow-hidden flex items-center justify-center"
+            style={{ backgroundColor: '#18181b' }}
+          >
             <div ref={qrContainerRef} />
           </div>
-          <p className="text-gray-500 text-xs">Send {PLAN_PRICE} USDT on <strong>{chainInfo.name}</strong> to the address below</p>
-        </div>
+          <p className="text-zinc-500 text-xs">Send exactly <strong className="text-white">{PLAN_PRICE} USDT</strong> to:</p>
+        </motion.div>
 
         {/* Address */}
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-5">
-          <p className="text-gray-400 text-sm mb-2">Payment address:</p>
-          <code className="text-green-400 text-sm break-all block mb-3">{MERCHANT_WALLET}</code>
-          <button
-            onClick={() => navigator.clipboard.writeText(MERCHANT_WALLET)}
-            className="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm text-gray-300 transition"
-          >
-            📋 Copy address
-          </button>
-        </div>
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15 }}
+          className="glass-card rounded-2xl p-5 border border-zinc-800/60"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-zinc-400 text-sm">Payment address</p>
+            <button
+              onClick={copyAddress}
+              className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-zinc-800/50"
+            >
+              <Copy className="w-3 h-3" />
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <code className="text-emerald-400 text-sm break-all block font-mono">{MERCHANT_WALLET}</code>
+        </motion.div>
 
-        {/* TX Hash */}
-        <div className="bg-gray-900 border border-gray-700 rounded-xl p-5">
-          <p className="text-gray-400 text-sm mb-2">After sending — paste tx hash:</p>
+        {/* TX Hash verify */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="glass-card rounded-2xl p-5 border border-zinc-800/60"
+        >
+          <p className="text-zinc-400 text-sm mb-3">After sending — paste tx hash to verify:</p>
           <textarea
             value={txHash}
             onChange={e => setTxHash(e.target.value)}
             placeholder="0x7a3f..."
-            className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm font-mono resize-none focus:outline-none focus:border-blue-500"
+            className="w-full bg-zinc-900/60 border border-zinc-800/80 rounded-xl px-3 py-2.5 text-white text-sm font-mono resize-none focus:outline-none focus:border-violet-500/50 focus:ring-1 focus:ring-violet-500/30 transition-all"
             rows={3}
           />
-          {txError && <p className="text-red-400 text-xs mt-2">{txError}</p>}
-          <button
+          {txError && (
+            <p className="text-red-400 text-xs mt-2">{txError}</p>
+          )}
+          <motion.button
             onClick={() => handleVerify()}
             disabled={verifying || !txHash.trim()}
-            className="w-full mt-3 px-4 py-3 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg font-medium transition"
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.98 }}
+            className="w-full mt-3 py-3.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 rounded-xl font-semibold text-white shadow-lg shadow-emerald-500/20 transition-all duration-200 flex items-center justify-center gap-2"
           >
-            {verifying ? 'Verifying...' : '✅ Verify Payment'}
-          </button>
-          <p className="text-gray-600 text-xs mt-3 text-center">
+            {verifying ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Verifying...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                Verify Payment
+              </>
+            )}
+          </motion.button>
+          <p className="text-zinc-600 text-xs mt-3 text-center">
             Confirmation: 1-3 min on {chainInfo.name}
           </p>
-        </div>
-
+        </motion.div>
       </main>
+
+      <style jsx global>{`
+        .glass-card {
+          background: rgba(17, 17, 22, 0.7);
+          backdrop-filter: blur(20px);
+          -webkit-backdrop-filter: blur(20px);
+        }
+      `}</style>
     </div>
   );
 }
@@ -329,8 +415,8 @@ function PaymentContent() {
 export default function PaymentPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <div className="w-12 h-12 border-3 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center">
+        <div className="w-12 h-12 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
       </div>
     }>
       <PaymentContent />

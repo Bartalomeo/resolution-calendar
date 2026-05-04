@@ -180,32 +180,36 @@ function HomeContent() {
   // --- Not logged in: show login prompt ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-950 text-white">
-        <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
+      <div className="min-h-screen bg-[#0A0A0A] text-white">
+        <header className="border-b border-zinc-800/50 sticky top-0 backdrop-blur-xl bg-[#0A0A0A]/80 z-10">
           <div className="max-w-4xl mx-auto px-4 py-4">
-            <h1 className="text-xl font-bold text-white flex items-center gap-2">
-              📅 Resolution Calendar <span className="text-xs text-gray-600">(v1)</span>
-            </h1>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-sm">📅</div>
+              <h1 className="text-xl font-bold text-white">Resolution Calendar</h1>
+            </div>
           </div>
         </header>
         <main className="max-w-md mx-auto px-4 py-20 text-center">
-          <h2 className="text-2xl font-bold mb-4">Sign in to continue</h2>
-          <p className="text-gray-400 mb-8">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 mb-6 shadow-lg shadow-violet-500/30">
+            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </div>
+          <h2 className="text-2xl font-bold mb-3">Sign in to continue</h2>
+          <p className="text-zinc-400 mb-8 leading-relaxed">
             Sign in to save your watchlist and get Telegram alerts when markets resolve.
           </p>
           <div className="space-y-3">
             <a
               href="/auth/login"
-              className="block w-full px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium text-center"
+              className="block w-full px-6 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 rounded-xl font-semibold text-center shadow-lg shadow-violet-500/20 transition-all"
             >
               Sign In / Register
             </a>
           </div>
-          <div className="mt-8 p-4 bg-gray-900 rounded-xl border border-gray-800">
-            <p className="text-gray-500 text-xs mb-2">Without signing in:</p>
-            <p className="text-gray-400 text-sm">• Browse all markets</p>
-            <p className="text-gray-400 text-sm">• No watchlist</p>
-            <p className="text-gray-400 text-sm">• No alerts</p>
+          <div className="mt-8 p-5 bg-zinc-900/50 rounded-2xl border border-zinc-800/60">
+            <p className="text-zinc-500 text-xs mb-3">Without signing in:</p>
+            <p className="text-zinc-400 text-sm">• Browse all markets</p>
+            <p className="text-zinc-400 text-sm">• No watchlist</p>
+            <p className="text-zinc-400 text-sm">• No alerts</p>
           </div>
         </main>
       </div>
@@ -213,56 +217,56 @@ function HomeContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white">
+    <div className="min-h-screen bg-[#0A0A0A] text-white">
       {/* Success toast */}
       {showSuccessToast && (
-        <div className="fixed top-4 right-4 z-50 bg-green-900 border border-green-700 text-white px-4 py-3 rounded-lg shadow-lg text-sm">
+        <div className="fixed top-4 right-4 z-50 bg-emerald-900/80 border border-emerald-700/50 backdrop-blur-xl text-white px-4 py-3 rounded-xl shadow-lg shadow-emerald-500/20 text-sm font-medium">
           ✅ Payment confirmed! {currentPlan.charAt(0).toUpperCase() + currentPlan.slice(1)} activated.
         </div>
       )}
 
       {/* Header */}
-      <header className="border-b border-gray-800 sticky top-0 bg-gray-950 z-10">
-        <div className="max-w-4xl mx-auto px-4 py-4">
+      <header className="border-b border-zinc-800/50 sticky top-0 backdrop-blur-xl bg-[#0A0A0A]/80 z-10">
+        <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-white flex items-center gap-2">
-                📅 Resolution Calendar <span className="text-xs text-gray-600">(v1)</span>
-              </h1>
-              <p className="text-xs text-gray-500">
-                {markets.length} active markets{lastUpdate && ` • Updated ${lastUpdate.toLocaleTimeString()}`}
-              </p>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-sm">📅</div>
+              <div>
+                <h1 className="text-lg font-bold text-white">Resolution Calendar</h1>
+                <p className="text-xs text-zinc-500">
+                  {markets.length} markets · {lastUpdate && `Updated ${lastUpdate.toLocaleTimeString()}`}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {/* Plan badge */}
               <button
                 onClick={() => setShowUpgradeModal(true)}
-                className={`px-3 py-1.5 rounded text-sm font-medium ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                   isSubscribed
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow'
+                    : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-700/40'
                 }`}
               >
                 {isSubscribed ? 'PRO' : 'FREE'}
-                {!isSubscribed && ' → UPGRADE'}
               </button>
 
               <button
                 onClick={() => setShowWatchlist(!showWatchlist)}
-                className={`px-3 py-1.5 rounded text-sm ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
                   showWatchlist
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                    ? 'bg-violet-600 text-white'
+                    : 'bg-zinc-800/60 text-zinc-400 hover:text-white border border-zinc-700/40'
                 }`}
               >
-                ★ Watchlist ({watchlist.size}{!isSubscribed && `/${WATCHLIST_LIMIT}`})
+                ★ {watchlist.size}{!isSubscribed && `/${WATCHLIST_LIMIT}`}
               </button>
 
               <a
                 href="https://t.me/Prediction_all_markets_bot"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-300 hover:bg-gray-700"
+                className="px-3 py-1.5 rounded-xl text-xs bg-zinc-800/60 text-zinc-400 hover:text-white border border-zinc-700/40 transition-all"
               >
                 🔔 Telegram
               </a>
@@ -270,7 +274,7 @@ function HomeContent() {
               <button
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="px-3 py-1.5 rounded text-sm bg-gray-800 text-gray-400 hover:bg-gray-700"
+                className="px-3 py-1.5 rounded-xl text-xs bg-zinc-800/60 text-zinc-500 hover:text-white border border-zinc-700/40 transition-all"
               >
                 {loggingOut ? '...' : '🚪'}
               </button>
@@ -282,17 +286,16 @@ function HomeContent() {
             {[
               { key: 'today' as View, label: `Today (${todayCount})`, color: 'text-red-400' },
               { key: 'week' as View, label: `This Week (${weekCount})`, color: 'text-yellow-400' },
-              { key: 'month' as View, label: 'All', color: 'text-gray-400' },
-              { key: 'resolved' as View, label: 'Resolved', color: 'text-gray-400' },
+              { key: 'month' as View, label: 'All', color: 'text-zinc-400' },
+              { key: 'resolved' as View, label: 'Resolved', color: 'text-zinc-400' },
             ].map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setView(tab.key)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-                  view === tab.key ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-gray-300'
-                }`}
+                onClick={() => { setView(tab.key); setShowWatchlist(false); }}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                  view === tab.key ? 'bg-zinc-800/80 text-white border border-zinc-700/60' : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900/50' }`}
               >
-                <span className={view === tab.key ? tab.color : ''}>{tab.label}</span>
+                {tab.label}
               </button>
             ))}
           </div>
@@ -300,7 +303,7 @@ function HomeContent() {
       </header>
 
       {/* Category filters */}
-      <div className="border-b border-gray-800">
+      <div className="border-b border-zinc-800/50">
         <div className="max-w-4xl mx-auto px-4 py-3">
           <div className="flex gap-2 flex-wrap">
             {[
@@ -313,10 +316,10 @@ function HomeContent() {
               <button
                 key={cat.key}
                 onClick={() => setCategory(cat.key)}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
                   category === cat.key
-                    ? 'bg-gray-700 text-white'
-                    : 'bg-gray-900 text-gray-400 hover:bg-gray-800'
+                    ? 'bg-zinc-800/80 text-white border border-zinc-700/60'
+                    : 'bg-zinc-900/40 text-zinc-400 hover:text-zinc-300 hover:bg-zinc-900/70 border border-zinc-800/40'
                 }`}
               >
                 {cat.label}
@@ -328,19 +331,19 @@ function HomeContent() {
 
       {/* Free tier banner */}
       {!isSubscribed && (
-        <div className="bg-gradient-to-r from-blue-900/50 to-purple-900/50 border-b border-blue-800/50">
+        <div className="bg-gradient-to-r from-violet-900/30 to-fuchsia-900/30 border-b border-violet-800/30">
           <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-white">
                 💎 Unlimited watchlist + priority alerts
               </p>
-              <p className="text-xs text-gray-400">
+              <p className="text-xs text-zinc-400">
                 Free: {WATCHLIST_LIMIT} markets max. Pro $4.99/mo.
               </p>
             </div>
             <button
               onClick={() => setShowUpgradeModal(true)}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg"
+              className="px-4 py-1.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white text-sm font-medium rounded-xl shadow-lg shadow-violet-500/20 transition-all"
             >
               UPGRADE →
             </button>
@@ -353,8 +356,8 @@ function HomeContent() {
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
-              <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-gray-500">Loading markets...</p>
+              <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+              <p className="text-zinc-500">Loading markets...</p>
             </div>
           </div>
         ) : view === 'resolved' ? (
@@ -374,41 +377,43 @@ function HomeContent() {
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-800 mt-12">
+      <footer className="border-t border-zinc-800/50 mt-12">
         <div className="max-w-4xl mx-auto px-4 py-6">
-          <div className="text-center text-gray-600 text-sm">
-            <p>Resolution Calendar</p>
+          <div className="text-center text-zinc-600 text-sm">
+            <p>Resolution Calendar · Powered by Polymarket</p>
           </div>
         </div>
       </footer>
 
       {/* Connect Telegram Modal */}
       {showConnectModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-white mb-2">🔔 Connect Telegram</h2>
-            <p className="text-gray-400 text-sm mb-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card rounded-2xl max-w-md w-full p-6 border border-zinc-800/60">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <span>🔔</span> Connect Telegram
+            </h2>
+            <p className="text-zinc-400 text-sm mb-4">
               Link your Telegram to get alerts when markets resolve.
             </p>
-            <div className="bg-gray-800 rounded-lg p-3 mb-4">
-              <p className="text-gray-400 text-xs mb-1">Your user ID:</p>
-              <code className="text-green-400 text-sm break-all">{user?.userId}</code>
+            <div className="bg-zinc-900/60 rounded-xl p-3 mb-4 border border-zinc-800/50">
+              <p className="text-zinc-400 text-xs mb-1">Your user ID:</p>
+              <code className="text-emerald-400 text-sm break-all font-mono">{user?.userId}</code>
             </div>
-            <ol className="text-gray-300 text-sm space-y-2 mb-4">
-              <li>1. Open <a href="https://t.me/Prediction_all_markets_bot" target="_blank" className="text-blue-400 underline">@Prediction_all_markets_bot</a></li>
-              <li>2. Send <code className="bg-gray-800 px-1 rounded">/start</code></li>
-              <li>3. Send <code className="bg-gray-800 px-1 rounded">/connect {user?.userId}</code></li>
+            <ol className="text-zinc-300 text-sm space-y-2 mb-4">
+              <li>1. Open <a href="https://t.me/Prediction_all_markets_bot" target="_blank" className="text-violet-400 underline hover:text-violet-300">@Prediction_all_markets_bot</a></li>
+              <li>2. Send <code className="bg-zinc-800 px-1.5 py-0.5 rounded-lg text-xs font-mono">/start</code></li>
+              <li>3. Send <code className="bg-zinc-800 px-1.5 py-0.5 rounded-lg text-xs font-mono">/connect {user?.userId}</code></li>
             </ol>
             <div className="flex gap-2">
               <button
                 onClick={() => setShowConnectModal(false)}
-                className="flex-1 px-4 py-2 rounded-lg bg-gray-800 text-gray-300 hover:bg-gray-700 text-sm"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800 text-sm font-medium transition-all border border-zinc-700/40"
               >
                 Later
               </button>
               <button
                 onClick={() => navigator.clipboard.writeText(`/connect ${user?.userId}`)}
-                className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm"
+                className="flex-1 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white hover:from-violet-500 hover:to-fuchsia-500 text-sm font-medium shadow-lg shadow-violet-500/20 transition-all"
               >
                 📋 Copy
               </button>
@@ -419,45 +424,45 @@ function HomeContent() {
 
       {/* Upgrade Modal */}
       {showUpgradeModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-900 border border-gray-700 rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-card rounded-2xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto border border-zinc-800/60">
+            <div className="flex items-center justify-between mb-5">
               <h2 className="text-xl font-bold text-white">Choose a plan</h2>
               <button
                 onClick={() => setShowUpgradeModal(false)}
-                className="text-gray-500 hover:text-white text-xl"
+                className="text-zinc-500 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-800/50 transition-colors"
               >
                 ×
               </button>
             </div>
 
-            <div className="grid gap-4">
+            <div className="space-y-4">
               {(['pro'] as const).map((key) => {
                 const plan = CRYPTO_PLANS[key];
                 return (
                   <div
                     key={key}
-                    className="rounded-xl border border-blue-500 bg-blue-950/30 p-5"
+                    className="rounded-2xl border border-violet-500/30 bg-gradient-to-br from-violet-900/20 to-fuchsia-900/20 p-5"
                   >
                     <div className="flex items-start justify-between mb-3">
                       <div>
                         <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-                        <p className="text-xs text-gray-400">${plan.priceUsdt}/mo (USDT)</p>
+                        <p className="text-xs text-zinc-400">${plan.priceUsdt}/mo (USDT)</p>
                       </div>
-                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-blue-600 text-white">
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow">
                         PRO
                       </span>
                     </div>
-                    <ul className="space-y-1 mb-4">
+                    <ul className="space-y-2 mb-4">
                       {plan.features.map((f, i) => (
-                        <li key={i} className="text-sm text-gray-300 flex items-center gap-2">
-                          <span className="text-green-400 text-xs">✓</span> {f}
+                        <li key={i} className="text-sm text-zinc-300 flex items-center gap-2">
+                          <span className="text-emerald-400 text-xs">✓</span> {f}
                         </li>
                       ))}
                     </ul>
                     <button
                       onClick={() => handleBuyPlan(key)}
-                      className="w-full py-2.5 rounded-lg font-medium transition bg-blue-600 hover:bg-blue-700 text-white"
+                      className="w-full py-3 rounded-xl font-semibold transition-all bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 text-white shadow-lg shadow-violet-500/20"
                     >
                       Buy for ${plan.priceUsdt} USDT
                     </button>
@@ -466,8 +471,8 @@ function HomeContent() {
               })}
             </div>
 
-            <div className="mt-4 p-3 bg-gray-800 rounded-lg">
-              <p className="text-gray-400 text-xs mb-2">Select network:</p>
+            <div className="mt-4 p-3.5 bg-zinc-900/50 rounded-xl border border-zinc-800/50">
+              <p className="text-zinc-400 text-xs mb-2">Select network:</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { key: 'ethereum', label: 'Ethereum', icon: 'Ξ' },
@@ -478,10 +483,10 @@ function HomeContent() {
                   <button
                     key={net.key}
                     onClick={() => setSelectedChain(net.key)}
-                    className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2 ${
+                    className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
                       selectedChain === net.key
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow'
+                        : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-700/40'
                     }`}
                   >
                     <span>{net.icon}</span>
