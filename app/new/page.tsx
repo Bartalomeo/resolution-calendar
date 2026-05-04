@@ -17,6 +17,19 @@ import {
 } from '@/lib/polymarket';
 import { PLANS as CRYPTO_PLANS } from '@/lib/crypto';
 import type { Subscription, UserStore } from '@/lib/redis';
+import { motion, type Variants } from 'framer-motion';
+
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' as const } },
+};
+const stagger: Variants = {
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+const scaleIn: Variants = {
+  hidden: { opacity: 0, scale: 0.9 },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.4, ease: 'backOut' as const } },
+};
 
 type View = 'today' | 'week' | 'month' | 'resolved';
 type Category = 'all' | 'crypto' | 'politics' | 'sports' | 'other';
@@ -180,44 +193,74 @@ function HomeContent() {
   // --- Not logged in: show login prompt ---
   if (!user) {
     return (
-      <div className="min-h-screen bg-[#0A0A0A] text-white">
-        <header className="border-b border-zinc-800/50 sticky top-0 backdrop-blur-xl bg-[#0A0A0A]/80 z-10">
-          <div className="max-w-4xl mx-auto px-4 py-4">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-600 to-fuchsia-600 flex items-center justify-center text-sm">📅</div>
-              <h1 className="text-xl font-bold text-white">Resolution Calendar</h1>
-            </div>
-          </div>
-        </header>
-        <main className="max-w-md mx-auto px-4 py-20 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 mb-6 shadow-lg shadow-violet-500/30">
-            <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-          </div>
-          <h2 className="text-2xl font-bold mb-3">Sign in to continue</h2>
-          <p className="text-zinc-400 mb-8 leading-relaxed">
-            Sign in to save your watchlist and get Telegram alerts when markets resolve.
-          </p>
-          <div className="space-y-3">
-            <a
-              href="/auth/login"
-              className="block w-full px-6 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 rounded-xl font-semibold text-center shadow-lg shadow-violet-500/20 transition-all"
+      <div className="min-h-screen bg-[#0A0A0A] text-white relative flex items-center justify-center">
+        {/* Background glow */}
+        <div className="fixed inset-0 pointer-events-none overflow-hidden">
+          <div
+            className="absolute w-[600px] h-[600px] rounded-full blur-[150px] opacity-10"
+            style={{
+              background: 'radial-gradient(circle, #7c3aed 0%, transparent 70%)',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+            }}
+          />
+        </div>
+        <div className="w-full max-w-sm relative px-4">
+          <motion.div
+            variants={stagger}
+            initial="hidden"
+            animate="visible"
+            className="text-center"
+          >
+            <motion.div variants={fadeUp} className="mb-6">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600 to-fuchsia-600 mb-4 shadow-lg shadow-violet-500/30">
+                <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              </div>
+              <h2 className="text-2xl font-bold text-white">Resolution Calendar</h2>
+              <p className="text-zinc-500 text-sm mt-1">Track Polymarket markets in real-time</p>
+            </motion.div>
+
+            <motion.div
+              variants={fadeUp}
+              className="glass-card rounded-2xl p-6 border border-zinc-800/60"
             >
-              Sign In / Register
-            </a>
-          </div>
-          <div className="mt-8 p-5 bg-zinc-900/50 rounded-2xl border border-zinc-800/60">
-            <p className="text-zinc-500 text-xs mb-3">Without signing in:</p>
-            <p className="text-zinc-400 text-sm">• Browse all markets</p>
-            <p className="text-zinc-400 text-sm">• No watchlist</p>
-            <p className="text-zinc-400 text-sm">• No alerts</p>
-          </div>
-        </main>
+              <h3 className="text-lg font-semibold text-white mb-2">Sign in to continue</h3>
+              <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
+                Save your watchlist and get Telegram alerts when markets resolve.
+              </p>
+              <a
+                href="/auth/login"
+                className="block w-full px-6 py-3.5 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-500 hover:to-fuchsia-500 rounded-xl font-semibold text-center shadow-lg shadow-violet-500/20 transition-all"
+              >
+                Sign In / Register
+              </a>
+            </motion.div>
+
+            <motion.p variants={fadeUp} className="text-zinc-600 text-xs mt-6">
+              Free tier: browse markets · Pro: unlimited watchlist + alerts
+            </motion.p>
+          </motion.div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white">
+    <div className="min-h-screen bg-[#0A0A0A] text-white relative">
+      {/* Background glow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div
+          className="absolute w-[600px] h-[600px] rounded-full blur-[150px] opacity-10"
+          style={{
+            background: 'radial-gradient(circle, #7c3aed 0%, transparent 70%)',
+            left: '50%',
+            top: '0%',
+            transform: 'translate(-50%, -20%)',
+          }}
+        />
+      </div>
+
       {/* Success toast */}
       {showSuccessToast && (
         <div className="fixed top-4 right-4 z-50 bg-emerald-900/80 border border-emerald-700/50 backdrop-blur-xl text-white px-4 py-3 rounded-xl shadow-lg shadow-emerald-500/20 text-sm font-medium">
@@ -505,40 +548,63 @@ function HomeContent() {
 function ResolvedSection({ markets }: { markets: Market[] }) {
   const recent = markets.slice(0, 50);
   if (recent.length === 0) {
-    return <div className="text-center py-12 text-gray-500">No resolved markets yet</div>;
+    return (
+      <div className="text-center py-16">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-2xl p-8 border border-zinc-800/50 max-w-md mx-auto text-center"
+        >
+          <div className="text-4xl mb-4">📭</div>
+          <p className="text-zinc-400 text-sm">No resolved markets yet</p>
+          <p className="text-zinc-600 text-xs mt-2">Check back later for settlement results</p>
+        </motion.div>
+      </div>
+    );
   }
   return (
     <div className="space-y-3">
-      <h2 className="text-lg font-semibold text-gray-300 mb-4">Recently Resolved</h2>
-      {recent.map(market => {
+      <motion.h2
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="text-lg font-semibold text-zinc-300 mb-4"
+      >
+        Recently Resolved
+      </motion.h2>
+      {recent.map((market, idx) => {
         const prices = market.outcomePrices || [];
-        const winner = prices.indexOf('1');
+        const yesPct = parseFloat(prices[0] || '0.5') * 100;
+        const noPct = 100 - yesPct;
+        const resolvedDate = new Date(market.endDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
         return (
-          <div key={market.id} className="bg-gray-900 rounded-lg p-4 border border-gray-800">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="text-white font-medium">{market.question}</p>
-                <p className="text-gray-500 text-sm mt-1">
-                  Resolved {new Date(market.endDate).toLocaleDateString()}
+          <motion.div
+            key={market.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.03 }}
+            className="glass-card rounded-2xl p-5 border border-zinc-800/60 group hover:border-zinc-700/80 transition-all"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-white font-medium line-clamp-2 mb-2 group-hover:text-zinc-200 transition-colors">
+                  {market.question}
                 </p>
+                <p className="text-zinc-500 text-xs">{resolvedDate}</p>
               </div>
-              <div className="text-right">
-                <div className="flex gap-1">
-                  {(market.outcomes || ['Yes', 'No']).map((outcome, i) => (
-                    <span
-                      key={i}
-                      className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        winner === i ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-500'
-                      }`}
-                    >
-                      {outcome} {winner === i ? '✓' : ''}
-                    </span>
-                  ))}
+              <div className="text-right shrink-0">
+                <div className="flex gap-1.5">
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    YES {yesPct.toFixed(0)}%
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-zinc-800/60 text-zinc-500 border border-zinc-700/40">
+                    NO {noPct.toFixed(0)}%
+                  </span>
                 </div>
-                <p className="text-gray-600 text-xs mt-1">Vol: {formatVolume(market.volume || 0)}</p>
+                <p className="text-zinc-600 text-xs mt-1.5">Vol: {formatVolume(market.volume || 0)}</p>
               </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -566,101 +632,142 @@ function MarketList({
 }) {
   if (markets.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-500">
-        {watchlist.size === 0 ? 'No markets in this view' : 'No markets in your watchlist match this filter'}
+      <div className="text-center py-16">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card rounded-2xl p-8 border border-zinc-800/50 max-w-md mx-auto text-center"
+        >
+          <div className="text-4xl mb-4">🔍</div>
+          <p className="text-zinc-400 text-sm">
+            {watchlist.size === 0 ? 'No markets in this view' : 'No markets in your watchlist match this filter'}
+          </p>
+        </motion.div>
       </div>
     );
   }
 
   return (
     <div className="space-y-3">
-      {markets.map(market => {
+      {markets.map((market, idx) => {
         const hours = getHoursUntilResolution(market.endDate);
         const soon = isResolvingSoon(market.endDate, 24);
         const category = (market as any)._category || 'other';
         const catColor = CATEGORY_COLORS[category] || CATEGORY_COLORS.other;
         const prices = market.outcomePrices || ['0.5', '0.5'];
+        const yesPct = Math.round(parseFloat(prices[0] || '0.5') * 100);
+        const noPct = 100 - yesPct;
 
         return (
-          <div
+          <motion.div
             key={market.id}
-            className={`bg-gray-900 rounded-lg p-4 border transition ${
-              soon ? 'border-red-600/50 bg-red-950/20' : 'border-gray-800'
-            } hover:border-gray-700`}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: idx * 0.04 }}
+            className={`glass-card rounded-2xl p-5 border transition-all group cursor-default ${
+              soon
+                ? 'border-red-500/20 hover:border-red-500/40'
+                : 'border-zinc-800/60 hover:border-zinc-700/80'
+            }`}
           >
-            <div className="flex items-center justify-between mb-2">
+            {/* Top row: category + countdown */}
+            <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span
-                  className="px-2 py-0.5 rounded text-xs font-medium"
-                  style={{ backgroundColor: `${catColor}20`, color: catColor }}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold"
+                  style={{ backgroundColor: `${catColor}15`, color: catColor, border: `1px solid ${catColor}30` }}
                 >
                   {CATEGORY_LABELS[category]}
                 </span>
                 {soon && (
-                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-900/50 text-red-400">
-                    🔴 Soon
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-red-500/10 text-red-400 border border-red-500/20 animate-pulse">
+                    🔴 Resolving Soon
                   </span>
                 )}
               </div>
-              <span className={`text-sm font-medium ${soon ? 'text-red-400' : 'text-gray-400'}`}>
-                ⏰ {getResolutionLabel(market.endDate)}
-              </span>
+              <div className={`flex items-center gap-1.5 text-xs font-medium ${soon ? 'text-red-400' : 'text-zinc-500'}`}>
+                <span>⏰</span>
+                <span>{getResolutionLabel(market.endDate)}</span>
+              </div>
             </div>
 
+            {/* Question */}
             <a
               href={`https://polymarket.com/event/${market.slug}`}
               target="_blank"
               rel="noopener noreferrer"
               className="block"
             >
-              <h3 className="text-white font-medium hover:text-blue-400 transition">
+              <h3 className="text-white font-medium mb-3 group-hover:text-violet-300 transition-colors line-clamp-2">
                 {market.question}
               </h3>
             </a>
 
-            <div className="flex items-center gap-4 mt-3">
-              <div className="flex gap-2">
-                {(market.outcomes || ['Yes', 'No']).map((outcome, i) => (
-                  <div key={i} className="flex items-center gap-1">
-                    <span className="text-gray-400 text-sm">{outcome}:</span>
-                    <span className={`font-medium ${parseFloat(prices[i] || '0') > 0.5 ? 'text-green-400' : 'text-gray-300'}`}>
-                      {formatPrice(prices[i] || '0.5')}
-                    </span>
-                  </div>
-                ))}
+            {/* Probability bar */}
+            <div className="mb-3">
+              <div className="flex items-center justify-between text-xs mb-1.5">
+                <span className="text-emerald-400 font-semibold">YES {yesPct}%</span>
+                <span className="text-rose-400 font-semibold">NO {noPct}%</span>
               </div>
-              <div className="text-gray-500 text-sm">
-                Vol: {formatVolume(market.volume || 0)}
+              <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden flex">
+                <motion.div
+                  className="bg-gradient-to-r from-emerald-500 to-emerald-400"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${yesPct}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut', delay: idx * 0.04 + 0.1 }}
+                />
+                <motion.div
+                  className="bg-gradient-to-r from-rose-500 to-rose-400"
+                  initial={{ width: 0 }}
+                  animate={{ width: `${noPct}%` }}
+                  transition={{ duration: 0.8, ease: 'easeOut', delay: idx * 0.04 + 0.1 }}
+                />
               </div>
             </div>
 
-            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-800">
-              <button
-                onClick={() => onToggleWatchlist(market.id)}
-                className={`px-3 py-1.5 rounded text-xs font-medium transition ${
-                  watchlist.has(market.id)
-                    ? 'bg-yellow-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-                }`}
-              >
-                {watchlist.has(market.id) ? '★ In Watchlist' : `☆ Watchlist${!isSubscribed ? ` (${watchlist.size}/${watchlistLimit})` : ''}`}
-              </button>
-              <button
-                onClick={() => onNotify(market)}
-                className="px-3 py-1.5 rounded text-xs font-medium bg-blue-900/50 text-blue-400 hover:bg-blue-900 transition"
-              >
-                🔔 Alert
-              </button>
-              <a
-                href={`https://polymarket.com/event/${market.slug}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-auto px-3 py-1.5 rounded text-xs font-medium bg-gray-800 text-gray-400 hover:bg-gray-700 transition"
-              >
-                Trade →
-              </a>
+            {/* Footer: volume + actions */}
+            <div className="flex items-center gap-2">
+              <div className="text-zinc-500 text-xs font-mono">
+                Vol: {formatVolume(market.volume || 0)}
+              </div>
+              <div className="flex-1" />
+              <div className="flex items-center gap-1.5">
+                <motion.button
+                  whileHover={{ y: -1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => onToggleWatchlist(market.id)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                    watchlist.has(market.id)
+                      ? 'bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 hover:bg-yellow-500/20'
+                      : 'bg-zinc-800/60 text-zinc-400 border border-zinc-700/40 hover:text-white hover:bg-zinc-800'
+                  }`}
+                >
+                  {watchlist.has(market.id) ? '★ Watching' : '☆ Watch'}
+                </motion.button>
+                <motion.button
+                  whileHover={{ y: -1 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => onNotify(market)}
+                  className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/15 transition-all"
+                >
+                  🔔 Alert
+                </motion.button>
+                <a
+                  href={`https://polymarket.com/event/${market.slug}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <motion.button
+                    whileHover={{ y: -1 }}
+                    whileTap={{ scale: 0.95 }}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-zinc-800/60 text-zinc-400 border border-zinc-700/40 hover:text-white hover:bg-zinc-800 transition-all"
+                  >
+                    Trade →
+                  </motion.button>
+                </a>
+              </div>
             </div>
-          </div>
+          </motion.div>
         );
       })}
     </div>
@@ -670,8 +777,15 @@ function MarketList({
 export default function Home() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-[#0A0A0A] text-white flex items-center justify-center">
+        <div className="text-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            className="w-10 h-10 border-2 border-violet-500 border-t-transparent rounded-full mx-auto mb-4"
+          />
+          <p className="text-zinc-500 text-sm">Loading...</p>
+        </div>
       </div>
     }>
       <HomeContent />
