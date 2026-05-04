@@ -26,7 +26,7 @@ export default function LoginPage() {
     fetch('/api/auth/session')
       .then(r => r.json())
       .then(data => {
-        if (data.user) router.replace('/');
+        if (data.user) router.replace('/new');
       });
   }, [router]);
 
@@ -46,7 +46,7 @@ export default function LoginPage() {
       if (!res.ok) {
         setError(data.error || 'Something went wrong');
       } else {
-        router.replace('/');
+        router.replace('/new');
       }
     } catch {
       setError('Network error');

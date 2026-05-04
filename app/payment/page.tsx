@@ -192,7 +192,7 @@ function PaymentContent() {
           <h1 className="text-2xl font-bold mb-2">Payment failed</h1>
           <p className="text-zinc-400 mb-6">{error}</p>
           <a
-            href="/"
+            href="/new"
             className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-6 py-3 rounded-xl font-medium"
           >
             Back to Calendar
@@ -222,7 +222,7 @@ function PaymentContent() {
           <p className="text-zinc-400 mb-2">Plan <strong className="text-white">{PLAN_NAME}</strong> activated.</p>
           <p className="text-zinc-600 text-sm mb-8">Valid for 30 days</p>
           <a
-            href="/"
+            href="/new"
             className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-6 py-3 rounded-xl font-medium"
           >
             Open Resolution Calendar
@@ -268,7 +268,7 @@ function PaymentContent() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-zinc-800/50 backdrop-blur-xl bg-[#0A0A0A]/80">
         <div className="max-w-lg mx-auto px-4 h-16 flex items-center gap-3">
-          <a href="/" className="text-zinc-500 hover:text-white transition-colors">
+          <a href="/new" className="text-zinc-500 hover:text-white transition-colors">
             <ChevronLeft className="w-5 h-5" />
           </a>
           <h1 className="text-lg font-semibold">Checkout</h1>
