@@ -528,7 +528,7 @@ function HomeContent() {
                     onClick={() => setSelectedChain(net.key)}
                     className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-2 ${
                       selectedChain === net.key
-                        ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow'
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/20'
                         : 'bg-zinc-800/60 text-zinc-400 hover:text-white hover:bg-zinc-800 border border-zinc-700/40'
                     }`}
                   >

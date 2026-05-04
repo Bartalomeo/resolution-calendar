@@ -40,7 +40,7 @@ export const PLANS = {
   pro: {
     name: 'Pro',
     priceUsdt: 4.99, // $4.99/month
-    features: ['Unlimited watchlist', 'Priority Telegram alerts', '48h resolution alerts', 'Daily email digest'],
+    features: ['Unlimited watchlist', 'Priority Telegram alerts', '48h resolution alerts', '24/7 monitoring forks (arbitrage) on Polymarket/Kalshi => immediately direct TG alert'],
   },
 } as const;
 
